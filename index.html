@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Uncharted</title>
+<meta name="theme-color" content="#07090d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="map"></div>
+<canvas id="fog"></canvas>
+
+<!-- Car marker, fixed at the follow-camera focal point -->
+<div id="car" aria-hidden="true">
+  <div class="car-pulse"></div>
+  <svg viewBox="0 0 64 64" width="64" height="64">
+    <defs>
+      <linearGradient id="carg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#9fe8ff"/><stop offset="1" stop-color="#2a8cff"/>
+      </linearGradient>
+    </defs>
+    <path d="M32 4 L54 56 L32 45 L10 56 Z" fill="url(#carg)" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<!-- Top status bar -->
+<header id="topbar">
+  <div class="tb-left">
+    <div id="speed"><span id="speedVal">--</span><small id="speedUnit">mph</small></div>
+    <div class="place">
+      <div id="placeName">Locating…</div>
+      <div id="placeSub" class="muted">Waiting for GPS</div>
+    </div>
+  </div>
+  <div class="tb-mid">
+    <div id="explored" class="chip" title="Territory explored"><b id="exploredVal">0.0</b> km² explored</div>
+    <div id="newRoad" class="chip hidden">✦ New ground</div>
+  </div>
+  <div class="tb-right">
+    <div id="weather" class="chip muted">—</div>
+    <div id="sun" class="chip muted">—</div>
+    <div id="clock">--:--</div>
+    <div id="gpsDot" class="dot" title="GPS status"></div>
+  </div>
+</header>
+
+<!-- Story card (slides in while driving) -->
+<aside id="story" class="card hidden">
+  <div class="story-img" id="storyImg"></div>
+  <div class="story-body">
+    <div class="story-kicker"><span id="storyCat">History</span> · <span id="storyDist">0.3 mi</span></div>
+    <h2 id="storyTitle">—</h2>
+    <p id="storyText">—</p>
+  </div>
+  <button class="story-x" id="storyClose" aria-label="Dismiss">✕</button>
+</aside>
+
+<!-- Alert banner (Waze feed / hazards) -->
+<div id="alert" class="hidden"><span id="alertIcon">⚠️</span><span id="alertText"></span></div>
+
+<!-- Glass of water -->
+<section id="glassBox" class="card">
+  <canvas id="glass" width="220" height="260"></canvas>
+  <div class="glass-stats">
+    <div><b id="smoothScore">100</b><small>smooth</small></div>
+    <div><b id="spills">0</b><small>spills</small></div>
+  </div>
+</section>
+
+<!-- Waze live map side panel -->
+<section id="wazePanel" class="card hidden">
+  <div class="panel-head">
+    <b>Waze Live</b>
+    <span class="muted" id="wazeMeta">police · crashes · hazards · traffic</span>
+    <button class="btn sm" id="wazeRecenter">Recenter</button>
+    <a class="btn sm ghost" id="wazeFull" target="_blank" rel="noopener" href="https://www.waze.com/live-map" style="text-decoration:none">Full screen ↗</a>
+    <button class="btn sm ghost" id="wazeClose">✕</button>
+  </div>
+  <iframe id="wazeFrame" title="Waze live map" allow="geolocation" referrerpolicy="no-referrer-when-downgrade"></iframe>
+</section>
+
+<!-- Full-screen sheets for parked / passenger modes -->
+<section id="sheet" class="hidden">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h1 id="sheetTitle">—</h1>
+      <button class="btn ghost" id="sheetClose">Back to map</button>
+    </div>
+    <div id="sheetLock" class="lock hidden">
+      <div class="lock-icon">🔒</div>
+      <h2>Eyes on the road</h2>
+      <p>This section unlocks when the car is parked.</p>
+      <button class="btn" id="passengerBtn">I'm a passenger</button>
+    </div>
+    <div id="sheetBody"></div>
+  </div>
+</section>
+
+<!-- Bottom dock -->
+<nav id="dock">
+  <button data-tab="drive" class="active"><i>🧭</i><span>Drive</span></button>
+  <button data-tab="waze"><i>🚓</i><span>Waze</span></button>
+  <button data-tab="collection"><i>💎</i><span>Collection</span></button>
+  <button data-tab="quests"><i>🏁</i><span>Quests</span></button>
+  <button data-tab="trips"><i>🛣️</i><span>Trips</span></button>
+  <button data-tab="quiz"><i>❓</i><span>Quiz</span></button>
+  <button data-tab="settings"><i>⚙️</i><span>Settings</span></button>
+  <div class="dock-sep"></div>
+  <button id="voiceBtn" class="toggle on" title="Voice narration"><i>🔊</i><span>Voice</span></button>
+  <button id="followBtn" class="toggle on" title="Follow car"><i>🎯</i><span>Follow</span></button>
+</nav>
+
+<div id="toasts"></div>
+
+<!-- Start overlay: browsers need a tap before audio + location -->
+<div id="start">
+  <div class="start-inner">
+    <div class="logo">UNCHARTED</div>
+    <p class="tag">Every road you drive clears the fog.</p>
+    <button class="btn big" id="startBtn">Start driving</button>
+    <button class="btn ghost" id="simBtn">Demo drive (simulated)</button>
+    <p class="muted small">Uses your car's location. Everything is stored only in this browser.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
