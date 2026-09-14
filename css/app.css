@@ -30,7 +30,6 @@ button { font: inherit; color: inherit; }
 .small { font-size: 15px; }
 
 #map { position: fixed; inset: 0; }
-#fog { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
 .maplibregl-ctrl-attrib { font-size: 11px; opacity: .6; }
 .maplibregl-ctrl-bottom-right { bottom: calc(var(--dock-h) + 4px); }
 

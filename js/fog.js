@@ -1,36 +1,72 @@
 // Fog of war: a grid of ~45 m cells. Every cell you drive through is
-// revealed forever. Rendered as a canvas overlay punched with soft holes.
+// revealed forever.
+//
+// Rendering: fog is painted into an offscreen canvas covering a 10 km square
+// around the car in Web-Mercator space, then drawn by a small WebGL custom
+// layer, so the GPU handles pan/zoom/pitch/rotation for free. The canvas is
+// only re-uploaded when new cells are revealed or the car leaves the region.
+// The rest of the world outside the region is drawn as solid fog.
+/* global maplibregl */
 import { bus, idb, distance } from './util.js';
 
 const CELL = 0.0004; // degrees latitude (~44 m)
 const CELL_M = CELL * 111320;
 const BUCKET = 64; // cells per spatial bucket side
 const REVEAL_M = 55; // reveal radius around the car
+const SIZE = 1024; // canvas px (~10 m per texel; fog edges are soft anyway)
+const REGION_M = 10000; // canvas covers REGION_M × REGION_M
+const RECENTER_M = 3000; // recenter when the car is this far from center
+const FOG_RGBA = [3, 5, 9, 0.62];
+
+const VERT = `
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+uniform mat4 u_matrix;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_uv;
+  gl_Position = u_matrix * vec4(a_pos, 0.0, 1.0);
+}`;
+// a_uv < 0 marks the solid surround; otherwise sample the premultiplied canvas.
+const FRAG = `
+precision mediump float;
+uniform sampler2D u_tex;
+uniform vec4 u_fog;
+varying vec2 v_uv;
+void main() {
+  gl_FragColor = v_uv.x < -0.5 ? u_fog : texture2D(u_tex, v_uv);
+}`;
 
 export class Fog {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+  constructor() {
     this.cells = new Set();
     this.buckets = new Map(); // "by:bx" -> [[lat, lon], ...]
     this.todayNew = 0;
     this.prevFix = null;
     this.dirty = false;
+    this.map = null;
+    this.region = null;
+    this.pending = [];
+    this.needsUpload = true;
+    this.needsGeometry = true;
     this.sprite = makeSprite();
-    this.resize();
-    addEventListener('resize', () => this.resize());
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = this.canvas.height = SIZE;
+    this.ctx = this.canvas.getContext('2d');
+    this.paintBase();
   }
 
   async load() {
     const arr = await idb.get('fogCells', []);
     for (const k of arr) this.addKey(k);
-    setInterval(() => this.save(), 15000);
+    setInterval(() => this.save(), 30000);
+    if (this.region) this.fullRedraw();
   }
 
   save() {
     if (!this.dirty) return;
     this.dirty = false;
-    idb.set('fogCells', [...this.cells]);
+    return idb.set('fogCells', [...this.cells]);
   }
 
   get areaKm2() {
@@ -40,8 +76,7 @@ export class Fog {
   keyFor(lat, lon) {
     const cy = Math.floor(lat / CELL);
     const lonCell = CELL / Math.cos(((cy + 0.5) * CELL * Math.PI) / 180);
-    const cx = Math.floor(lon / lonCell);
-    return `${cy}:${cx}`;
+    return `${cy}:${Math.floor(lon / lonCell)}`;
   }
 
   centerOf(key) {
@@ -52,14 +87,15 @@ export class Fog {
   }
 
   addKey(key) {
-    if (this.cells.has(key)) return false;
+    if (this.cells.has(key)) return null;
     this.cells.add(key);
     const [cy, cx] = key.split(':').map(Number);
     const bk = `${Math.floor(cy / BUCKET)}:${Math.floor(cx / BUCKET)}`;
     let b = this.buckets.get(bk);
     if (!b) this.buckets.set(bk, (b = []));
-    b.push(this.centerOf(key));
-    return true;
+    const c = this.centerOf(key);
+    b.push(c);
+    return c;
   }
 
   isVisited(lat, lon) {
@@ -79,11 +115,13 @@ export class Fog {
       }
     }
     this.prevFix = fix;
+    this.ensureRegion(fix.lat, fix.lon);
     let added = 0;
     for (const [lat, lon] of pts) added += this.revealAround(lat, lon);
     if (added) {
       this.dirty = true;
       this.todayNew += added;
+      this.flushPending();
       bus.emit('fog', { added, areaKm2: this.areaKm2, cells: this.cells.size });
     }
     return added;
@@ -96,71 +134,190 @@ export class Fog {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (dx * dx + dy * dy > r * r + 1) continue;
-        if (this.addKey(this.keyFor(lat + dy * CELL, lon + dx * lonStep))) added++;
+        const c = this.addKey(this.keyFor(lat + dy * CELL, lon + dx * lonStep));
+        if (c) {
+          this.pending.push(c);
+          added++;
+        }
       }
     }
     return added;
   }
 
-  resize() {
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    this.dpr = dpr;
-    this.canvas.width = innerWidth * dpr;
-    this.canvas.height = innerHeight * dpr;
+  // ---------- region + canvas ----------
+
+  ensureRegion(lat, lon, force = false) {
+    const r = this.region;
+    if (!force && r && distance(r.lat, r.lon, lat, lon) < RECENTER_M) return;
+    const mc = maplibregl.MercatorCoordinate.fromLngLat([lon, lat]);
+    const half = (REGION_M / 2) * mc.meterInMercatorCoordinateUnits();
+    const ll = (x, y) => new maplibregl.MercatorCoordinate(x, y).toLngLat();
+    const nw = ll(mc.x - half, mc.y - half), se = ll(mc.x + half, mc.y + half);
+    this.region = {
+      lat, lon, x0: mc.x - half, y0: mc.y - half, span: half * 2,
+      bbox: { s: se.lat, n: nw.lat, w: nw.lng, e: se.lng },
+      pxPerM: SIZE / REGION_M,
+    };
+    this.needsGeometry = true;
+    this.fullRedraw();
   }
 
-  draw(map, { opacity = 0.62 } = {}) {
-    const { ctx, canvas, dpr } = this;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  paintBase() {
+    const { ctx } = this;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = `rgba(3, 5, 9, ${opacity})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (!this.cells.size) return;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.fillStyle = `rgba(${FOG_RGBA.join(',')})`;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+  }
 
-    const b = map.getBounds();
-    const s = b.getSouth(), n = b.getNorth(), w = b.getWest(), e = b.getEast();
-    const pad = CELL * 4;
-    const cyMin = Math.floor((s - pad) / CELL / BUCKET), cyMax = Math.floor((n + pad) / CELL / BUCKET);
-    const lonCell = CELL / Math.cos((((s + n) / 2) * Math.PI) / 180);
-    const cxMin = Math.floor((w - pad) / lonCell / BUCKET) - 1, cxMax = Math.floor((e + pad) / lonCell / BUCKET) + 1;
-    if ((cyMax - cyMin) * (cxMax - cxMin) > 4000) return; // zoomed way out: skip holes
+  punch(lat, lon) {
+    const r = this.region;
+    const mc = maplibregl.MercatorCoordinate.fromLngLat([lon, lat]);
+    const x = ((mc.x - r.x0) / r.span) * SIZE;
+    const y = ((mc.y - r.y0) / r.span) * SIZE;
+    const rad = REVEAL_M * 1.35 * r.pxPerM;
+    if (x < -rad || y < -rad || x > SIZE + rad || y > SIZE + rad) return false;
+    this.ctx.drawImage(this.sprite, x - rad, y - rad, rad * 2, rad * 2);
+    return true;
+  }
 
-    // Pixel radius: project a point REVEAL_M*1.3 east of the view center.
-    const c = map.getCenter();
-    const p0 = map.project(c);
-    const p1 = map.project([c.lng + (REVEAL_M * 1.4) / (111320 * Math.cos((c.lat * Math.PI) / 180)), c.lat]);
-    const baseR = Math.max(3, Math.hypot(p1.x - p0.x, p1.y - p0.y)) * dpr;
-
-    ctx.globalCompositeOperation = 'destination-out';
-    const H = canvas.height;
-    for (let by = cyMin; by <= cyMax; by++) {
-      for (let bx = cxMin; bx <= cxMax; bx++) {
+  fullRedraw() {
+    if (!this.region) return 0;
+    this.paintBase();
+    this.pending = [];
+    const b = this.region.bbox;
+    const pad = CELL * 3;
+    const lonCell = CELL / Math.cos((((b.s + b.n) / 2) * Math.PI) / 180);
+    const byMin = Math.floor((b.s - pad) / CELL / BUCKET), byMax = Math.floor((b.n + pad) / CELL / BUCKET);
+    const bxMin = Math.floor((b.w - pad) / lonCell / BUCKET) - 1, bxMax = Math.floor((b.e + pad) / lonCell / BUCKET) + 1;
+    this.ctx.globalCompositeOperation = 'destination-out';
+    let n = 0;
+    for (let by = byMin; by <= byMax; by++) {
+      for (let bx = bxMin; bx <= bxMax; bx++) {
         const arr = this.buckets.get(`${by}:${bx}`);
         if (!arr) continue;
-        for (const [lat, lon] of arr) {
-          if (lat < s - pad || lat > n + pad || lon < w - pad || lon > e + pad) continue;
-          const pt = map.project([lon, lat]);
-          const x = pt.x * dpr, y = pt.y * dpr;
-          // Pitched views shrink distant holes; scale with screen height.
-          const r = baseR * (0.45 + 0.75 * (y / H));
-          if (x < -r || y < -r || x > canvas.width + r || y > H + r) continue;
-          ctx.drawImage(this.sprite, x - r, y - r, r * 2, r * 2);
-        }
+        for (const [lat, lon] of arr) if (this.punch(lat, lon)) n++;
       }
     }
+    this.upload();
+    return n;
+  }
+
+  flushPending() {
+    if (!this.region || !this.pending.length) return;
+    this.ctx.globalCompositeOperation = 'destination-out';
+    for (const [lat, lon] of this.pending) this.punch(lat, lon);
+    this.pending = [];
+    this.upload();
+  }
+
+  upload() {
+    this.needsUpload = true;
+    this.map?.triggerRepaint();
+  }
+
+  // ---------- WebGL custom layer ----------
+
+  attach(map) {
+    this.map = map;
+    if (!this.region) {
+      const c = map.getCenter();
+      this.ensureRegion(c.lat, c.lng, true);
+    }
+    if (map.getLayer('fog')) return;
+    const fog = this;
+    map.addLayer({
+      id: 'fog',
+      type: 'custom',
+      renderingMode: '2d',
+      onAdd(_map, gl) {
+        const sh = (type, src) => {
+          const s = gl.createShader(type);
+          gl.shaderSource(s, src);
+          gl.compileShader(s);
+          return s;
+        };
+        const prog = gl.createProgram();
+        gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
+        gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+        gl.linkProgram(prog);
+        this.prog = prog;
+        this.aPos = gl.getAttribLocation(prog, 'a_pos');
+        this.aUv = gl.getAttribLocation(prog, 'a_uv');
+        this.uMatrix = gl.getUniformLocation(prog, 'u_matrix');
+        this.uTex = gl.getUniformLocation(prog, 'u_tex');
+        this.uFog = gl.getUniformLocation(prog, 'u_fog');
+        this.buf = gl.createBuffer();
+        this.tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        fog.needsUpload = true;
+        fog.needsGeometry = true;
+      },
+      onRemove(_map, gl) {
+        gl.deleteBuffer(this.buf);
+        gl.deleteTexture(this.tex);
+        gl.deleteProgram(this.prog);
+      },
+      render(gl, matrix) {
+        const r = fog.region;
+        if (!r) return;
+        if (fog.needsGeometry) {
+          // Region quad (textured) + four solid-fog quads around it.
+          const x0 = r.x0, y0 = r.y0, x1 = r.x0 + r.span, y1 = r.y0 + r.span;
+          const N = -1; // uv marker for solid fog
+          const quad = (ax, ay, bx, by, u0, v0, u1, v1) => [ax, ay, u0, v0, bx, ay, u1, v0, ax, by, u0, v1, ax, by, u0, v1, bx, ay, u1, v0, bx, by, u1, v1];
+          const verts = [
+            ...quad(x0, y0, x1, y1, 0, 0, 1, 1),
+            ...quad(-1, -1, 2, y0, N, N, N, N),
+            ...quad(-1, y1, 2, 2, N, N, N, N),
+            ...quad(-1, y0, x0, y1, N, N, N, N),
+            ...quad(x1, y0, 2, y1, N, N, N, N),
+          ];
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+          fog.needsGeometry = false;
+        }
+        gl.useProgram(this.prog);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        if (fog.needsUpload) {
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fog.canvas);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+          fog.needsUpload = false;
+        }
+        gl.uniformMatrix4fv(this.uMatrix, false, matrix);
+        gl.uniform1i(this.uTex, 0);
+        const a = FOG_RGBA[3];
+        gl.uniform4f(this.uFog, (FOG_RGBA[0] / 255) * a, (FOG_RGBA[1] / 255) * a, (FOG_RGBA[2] / 255) * a, a);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+        gl.enableVertexAttribArray(this.aPos);
+        gl.enableVertexAttribArray(this.aUv);
+        gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 16, 0);
+        gl.vertexAttribPointer(this.aUv, 2, gl.FLOAT, false, 16, 8);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.disable(gl.DEPTH_TEST);
+        gl.drawArrays(gl.TRIANGLES, 0, 30);
+      },
+    });
+    this.fullRedraw();
   }
 }
 
 function makeSprite() {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = c.height = 64;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   grad.addColorStop(0, 'rgba(0,0,0,1)');
   grad.addColorStop(0.55, 'rgba(0,0,0,0.9)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
+  g.fillRect(0, 0, 64, 64);
   return c;
 }

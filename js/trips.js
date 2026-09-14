@@ -20,8 +20,13 @@ export class Trips {
   async load() {
     this.trips = await idb.get('trips', []);
     const cur = await idb.get('tripCurrent', null);
-    // Resume a trip interrupted by a page reload within 10 minutes.
+    // Resume a trip interrupted by a page reload within 10 minutes;
+    // otherwise the browser was closed mid-trip, so save what was recorded.
     if (cur && Date.now() - cur.lastT < 10 * 60000) this.current = cur;
+    else if (cur) {
+      this.current = cur;
+      await this.end();
+    }
     bus.on('glass', (g) => {
       if (this.current) {
         this.current.score = g.score;

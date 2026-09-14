@@ -46,9 +46,11 @@ export class Glass {
       const w = (angleDiff(p.heading, fix.heading) * Math.PI) / 180 / dt; // yaw rate rad/s
       aLat = clamp(fix.speed * w, -12, 12);
     }
-    // Light smoothing: GPS speed is already filtered by the receiver.
-    this.aLong = this.aLong * 0.35 + aLong * 0.65;
-    this.aLat = this.aLat * 0.35 + aLat * 0.65;
+    // Receiver-reported speed is already filtered; position-derived speed is
+    // noisy, so smooth it much harder to avoid phantom spills.
+    const k = fix.derived ? 0.3 : 0.65;
+    this.aLong = this.aLong * (1 - k) + aLong * k;
+    this.aLat = this.aLat * (1 - k) + aLat * k;
 
     const g = Math.hypot(this.aLong, this.aLat) / G;
     this.peakG = Math.max(this.peakG, g);
@@ -83,6 +85,9 @@ export class Glass {
   }
 
   frame(t) {
+    requestAnimationFrame((tt) => this.frame(tt));
+    // ~30 fps is plenty for water, and skip entirely when not visible.
+    if (t - (this.lastT || 0) < 32 || document.hidden || !this.canvas.offsetParent) return;
     const dt = Math.min(0.05, (t - (this.lastT || t)) / 1000);
     this.lastT = t;
     // Water surface tilts toward the outside of the turn.
@@ -95,7 +100,6 @@ export class Glass {
     this.aLong *= 1 - dt * 0.8;
     this.aLat *= 1 - dt * 0.8;
     this.draw(t / 1000, dt);
-    requestAnimationFrame((tt) => this.frame(tt));
   }
 
   draw(time, dt) {

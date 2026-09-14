@@ -70,6 +70,14 @@ Waze has no free public API for alert data, and its live-map feed rejects reques
 
 ---
 
+## Performance & reliability
+
+- **Fog is drawn on the GPU.** A small WebGL layer draws a texture covering 10 km around the car. The CPU only touches it when new ground is revealed (under 5 ms) or when the car moves more than 3 km (one redraw, about 0.2 s for 40,000 explored cells). Pan, zoom, tilt and rotation cost nothing extra.
+- The glass animation is capped at 30 fps and stops when hidden. The map doesn't animate behind full-screen sections. Only one replay map exists at a time, since car hardware has few WebGL contexts to spare.
+- If the browser doesn't report speed, the app works it out from position changes. That estimate is smoothed hard, and movement within the GPS accuracy circle is ignored, so parked drift doesn't trigger spills.
+- If the browser is closed mid-drive, the drive is saved the next time you open the app.
+- A service worker caches the app itself, so it still opens on weak LTE.
+
 ## Development
 
 It's plain HTML/CSS/ES modules with no build step.

@@ -12,12 +12,12 @@ import { Trips } from './trips.js';
 import { Alerts } from './waze.js';
 import { Quests } from './quests.js';
 import { renderQuiz } from './quiz.js';
-import { renderCollection, renderQuests, renderTrips, renderSettings } from './sheets.js';
+import { renderCollection, renderQuests, renderTrips, renderSettings, disposeRecap } from './sheets.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 
-const fog = new Fog($('fog'));
+const fog = new Fog();
 const mapView = new MapView(fog);
 const glass = new Glass($('glass'));
 const stories = new Stories();
@@ -86,10 +86,12 @@ function openSheet(tab) {
   alerts.toggle(false);
   setDock(tab);
   $('sheet').classList.remove('hidden');
+  mapView.covered = true;
   $('sheetTitle').textContent = SHEETS[tab][0];
   renderSheetBody();
 }
 function renderSheetBody() {
+  disposeRecap();
   const locked = LOCKED.has(activeTab) && trips.moving && !passenger;
   $('sheetLock').classList.toggle('hidden', !locked);
   $('sheetBody').classList.toggle('hidden', locked);
@@ -97,6 +99,8 @@ function renderSheetBody() {
   else $('sheetBody').innerHTML = '';
 }
 function closeSheet() {
+  disposeRecap();
+  mapView.covered = false;
   $('sheet').classList.add('hidden');
   $('sheetBody').innerHTML = '';
   setDock(alerts.open ? 'waze' : 'drive');
@@ -274,6 +278,10 @@ bus.on('net-error', (e) => console.warn(`[${e.source}]`, e.message));
 
 // ---------- Start ----------
 async function boot() {
+  if (!window.maplibregl) {
+    $('start').querySelector('.tag').textContent = 'Could not load the map engine. Check the internet connection and reload.';
+    return;
+  }
   applySettings(settings.get());
   const center = ls.get('lastPos', [-71.0589, 42.3601]);
   mapView.init(center);
@@ -325,6 +333,11 @@ $('simBtn').onclick = startSim;
 boot().then(() => {
   if (params.has('sim') && params.has('autostart')) startSim();
 });
+
+// Cache the app shell so it still opens on weak LTE.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 
 // Expose for debugging from the console.
 window.uncharted = { fog, mapView, glass, stories, place, trips, alerts, quests, settings, bus, RARITY };

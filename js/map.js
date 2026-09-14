@@ -67,6 +67,7 @@ export class MapView {
   addLayers() {
     const map = this.map;
     const empty = { type: 'FeatureCollection', features: [] };
+    this.fog.attach(map); // fog sits above the basemap, below our layers
     map.addSource('history', { type: 'geojson', data: empty });
     map.addSource('trail', { type: 'geojson', data: empty });
     map.addSource('places', { type: 'geojson', data: empty });
@@ -115,15 +116,17 @@ export class MapView {
       const h = innerHeight;
       // Zoom out as speed increases so you see further ahead.
       const zoom = clamp(17.2 - fix.speed * 0.085, 14.3, 17.2);
-      this.map.easeTo({
+      const camera = {
         center: [fix.lon, fix.lat],
         bearing: fix.heading ?? this.map.getBearing(),
         zoom,
         pitch: settings.get().pitch,
         padding: { top: h * 0.38, bottom: 0, left: 0, right: 0 },
-        duration: immediate ? 600 : fix.source === 'sim' ? 1000 : 950,
-        easing: (t) => t,
-      });
+      };
+      // When a full-screen section covers the map, jump instead of animating
+      // so the GPU isn't rendering 60 fps behind it.
+      if (this.covered) this.map.jumpTo(camera);
+      else this.map.easeTo({ ...camera, duration: immediate ? 600 : 950, easing: (t) => t });
     }
     this.carEl.classList.toggle('stale', false);
     this.onRender();
@@ -134,7 +137,6 @@ export class MapView {
     if (!this.raf) {
       this.raf = requestAnimationFrame(() => {
         this.raf = null;
-        this.fog.draw(this.map);
         this.placeCar();
       });
     }

@@ -45,11 +45,16 @@ export class GpsSource {
     const { latitude: lat, longitude: lon, accuracy: acc } = p.coords;
     let speed = p.coords.speed;
     let heading = p.coords.heading;
+    let derived = false;
 
     if (this.prev) {
       const d = distance(this.prev.lat, this.prev.lon, lat, lon);
       const dt = (t - this.prev.t) / 1000;
-      if ((speed == null || Number.isNaN(speed)) && dt > 0) speed = d / dt;
+      if ((speed == null || Number.isNaN(speed)) && dt > 0) {
+        // Ignore movement inside the accuracy circle (parked GPS drift).
+        speed = d < acc * 0.6 ? 0 : d / dt;
+        derived = true;
+      }
       if ((heading == null || Number.isNaN(heading)) && d > Math.max(4, acc * 0.5)) {
         heading = bearing(this.prev.lat, this.prev.lon, lat, lon);
       }
@@ -63,7 +68,7 @@ export class GpsSource {
     this.fixTimes.push(this.lastFixAt);
     if (this.fixTimes.length > 10) this.fixTimes.shift();
 
-    const fix = { lat, lon, acc, speed, heading, t, source: 'gps', rate: this.rate() };
+    const fix = { lat, lon, acc, speed, heading, t, source: 'gps', rate: this.rate(), derived };
     this.prev = fix;
     bus.emit('gps', { state: acc <= 30 ? 'ok' : 'weak', message: `±${Math.round(acc)} m` });
     bus.emit('fix', fix);

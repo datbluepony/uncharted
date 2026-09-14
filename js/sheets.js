@@ -7,6 +7,13 @@ import { CAT_COLORS } from './map.js';
 import { speech } from './speech.js';
 
 const CELL_KM2 = (0.0004 * 111320) ** 2 / 1e6;
+
+// Only one replay map at a time: WebGL contexts are scarce on car hardware.
+let recapMap = null;
+export function disposeRecap() {
+  recapMap?.remove();
+  recapMap = null;
+}
 const badge = (p) => `<span class="badge" style="background:${CAT_COLORS[p.cat]}">${CATS[p.cat].icon} ${CATS[p.cat].label}</span>`;
 const scoreColor = (s) => (s >= 90 ? 'var(--accent2)' : s >= 75 ? 'var(--warn)' : 'var(--danger)');
 const when = (t) => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -84,6 +91,7 @@ export function renderQuests(root, { quests, deps }) {
 
 // ---------------- Trips ----------------
 export function renderTrips(root, deps) {
+  disposeRecap();
   const { trips, stories } = deps;
   const week = trips.since(7 * 86400000);
   const miles = week.reduce((s, t) => s + t.meters, 0);
@@ -140,7 +148,8 @@ export async function renderRecap(root, deps, trip) {
   const pts = trip.points.map((p) => [p[1], p[0]]);
   if (pts.length < 2) return;
   const bounds = pts.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
-  const map = new maplibregl.Map({ container: 'rMap', style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', bounds, fitBoundsOptions: { padding: 60 }, attributionControl: { compact: true } });
+  disposeRecap();
+  const map = (recapMap = new maplibregl.Map({ container: 'rMap', style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', bounds, fitBoundsOptions: { padding: 60 }, attributionControl: { compact: true } }));
   let run = 0;
   const play = async () => {
     const my = ++run;
