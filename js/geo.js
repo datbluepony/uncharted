@@ -68,7 +68,7 @@ export class GpsSource {
     this.fixTimes.push(this.lastFixAt);
     if (this.fixTimes.length > 10) this.fixTimes.shift();
 
-    const fix = { lat, lon, acc, speed, heading, t, source: 'gps', rate: this.rate(), derived };
+    const fix = { lat, lon, acc, speed, heading, t, source: 'gps', rate: this.rate(), derived, altitude: p.coords.altitude };
     this.prev = fix;
     bus.emit('gps', { state: acc <= 30 ? 'ok' : 'weak', message: `±${Math.round(acc)} m` });
     bus.emit('fix', fix);

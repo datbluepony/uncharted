@@ -145,6 +145,9 @@ const DEFAULTS = {
   pitch: 60,
   wazeFeedUrl: '', // optional proxy returning Waze georss JSON for spoken alerts
   alertVoice: true,
+  sfx: true,
+  voiceEngine: 'auto', // auto | browser | natural
+  trim: 'lr', // rwd | lr | perf (energy estimate)
 };
 let current = { ...DEFAULTS, ...ls.get('settings', {}) };
 current.categories = { ...DEFAULTS.categories, ...(current.categories || {}) };

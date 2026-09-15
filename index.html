@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Uncharted</title>
+<title>Uncharted · Andrew &amp; Jenna</title>
 <meta name="theme-color" content="#07090d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/v2.css">
 </head>
 <body>
 <div id="map"></div>
@@ -37,8 +38,10 @@
   <div class="tb-mid">
     <div id="explored" class="chip" title="Territory explored"><b id="exploredVal">0.0</b> km² explored</div>
     <div id="newRoad" class="chip hidden">✦ New ground</div>
+    <div id="scChip" class="chip hidden" title="Nearest Supercharger">⚡ <b id="scChipVal">—</b></div>
   </div>
   <div class="tb-right">
+    <div class="monogram" title="Andrew &amp; Jenna">A<i>✦</i>J</div>
     <div id="weather" class="chip muted">—</div>
     <div id="sun" class="chip muted">—</div>
     <div id="clock">--:--</div>
@@ -46,18 +49,20 @@
   </div>
 </header>
 
-<!-- Story card (slides in while driving) -->
-<aside id="story" class="card hidden">
+<!-- Story card (slides in while driving) — tap for the full story -->
+<aside id="story" class="card hidden" role="button" tabindex="0">
   <div class="story-img" id="storyImg"></div>
   <div class="story-body">
     <div class="story-kicker"><span id="storyCat">History</span> · <span id="storyDist">0.3 mi</span></div>
     <h2 id="storyTitle">—</h2>
     <p id="storyText">—</p>
+    <div class="story-more">Tap for the full story ›</div>
   </div>
   <button class="story-x" id="storyClose" aria-label="Dismiss">✕</button>
+  <div class="story-timer" id="storyTimer"></div>
 </aside>
 
-<!-- Alert banner (Waze feed / hazards) -->
+<!-- Alert banner (cameras / feed alerts) -->
 <div id="alert" class="hidden"><span id="alertIcon">⚠️</span><span id="alertText"></span></div>
 
 <!-- Glass of water -->
@@ -98,9 +103,20 @@
   </div>
 </section>
 
+<!-- Place detail pop-up -->
+<div id="modal" class="hidden" role="dialog" aria-modal="true">
+  <div class="modal-backdrop"></div>
+  <article class="modal-card">
+    <button class="modal-back hidden" aria-label="Back">‹</button>
+    <button class="modal-x" aria-label="Close">✕</button>
+    <div class="modal-scroll" id="modalBody"></div>
+  </article>
+</div>
+
 <!-- Bottom dock -->
 <nav id="dock">
   <button data-tab="drive" class="active"><i>🧭</i><span>Drive</span></button>
+  <button data-tab="car"><i>🚘</i><span>Car</span></button>
   <button data-tab="waze"><i>🚓</i><span>Waze</span></button>
   <button data-tab="collection"><i>💎</i><span>Collection</span></button>
   <button data-tab="quests"><i>🏁</i><span>Quests</span></button>
@@ -114,14 +130,23 @@
 
 <div id="toasts"></div>
 
-<!-- Start overlay: browsers need a tap before audio + location -->
+<!-- Opening screen: a tap is also what unlocks audio + location -->
 <div id="start">
+  <canvas id="introCanvas"></canvas>
   <div class="start-inner">
-    <div class="logo">UNCHARTED</div>
-    <p class="tag">Every road you drive clears the fog.</p>
-    <button class="btn big" id="startBtn">Start driving</button>
-    <button class="btn ghost" id="simBtn">Demo drive (simulated)</button>
-    <p class="muted small">Uses your car's location. Everything is stored only in this browser.</p>
+    <div class="intro-greet" id="introGreet">Welcome back</div>
+    <div class="logo"><span>U</span><span>N</span><span>C</span><span>H</span><span>A</span><span>R</span><span>T</span><span>E</span><span>D</span></div>
+    <div class="dedication">
+      <span>for Andrew &amp; Jenna</span>
+      <i class="ded-star">✦</i>
+      <span>by Andrew &amp; Jenna</span>
+    </div>
+    <div class="intro-stats" id="introStats"></div>
+    <div class="intro-actions">
+      <button class="btn big glow" id="startBtn">Start the journey</button>
+      <button class="btn ghost" id="simBtn">Demo drive</button>
+    </div>
+    <div class="intro-car" id="introCar"></div>
   </div>
 </div>
 

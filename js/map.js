@@ -97,10 +97,36 @@ export class MapView {
     map.on('mouseenter', 'places-dot', () => (map.getCanvas().style.cursor = 'pointer'));
     map.on('mouseleave', 'places-dot', () => (map.getCanvas().style.cursor = ''));
 
+    // Superchargers (below the place pins)
+    map.addSource('sc', { type: 'geojson', data: empty });
+    map.addLayer({ id: 'sc-glow', type: 'circle', source: 'sc', minzoom: 10,
+      paint: { 'circle-color': '#ff4d5e', 'circle-radius': 16, 'circle-blur': 1, 'circle-opacity': 0.45 } }, 'places-glow');
+    map.addLayer({ id: 'sc-dot', type: 'circle', source: 'sc', minzoom: 5,
+      paint: { 'circle-color': '#ff4d5e', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2, 12, 7],
+        'circle-stroke-color': '#fff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 0, 12, 2] } }, 'places-glow');
+    map.addLayer({ id: 'sc-label', type: 'symbol', source: 'sc', minzoom: 12.5,
+      layout: { 'text-field': ['concat', ['get', 'name'], ' Supercharger'], 'text-size': 12, 'text-offset': [0, 1.2], 'text-anchor': 'top',
+        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'], 'text-optional': true },
+      paint: { 'text-color': '#ffb3ba', 'text-halo-color': '#05070a', 'text-halo-width': 1.5 } }, 'places-glow');
+    map.on('click', 'sc-dot', (e) => {
+      const f = e.features?.[0];
+      if (f) bus.emit('sc-click', { ...f.properties, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] });
+    });
+
     this.ready = true;
     this.setTrail(this.trail);
     if (this.pendingPlaces) this.setPlaces(this.pendingPlaces);
     if (this.pendingHistory) this.setHistory(this.pendingHistory);
+    if (this.pendingSC) this.setSuperchargers(this.pendingSC);
+  }
+
+  setSuperchargers(sites) {
+    this.pendingSC = sites;
+    if (!this.ready) return;
+    this.map.getSource('sc').setData({
+      type: 'FeatureCollection',
+      features: sites.map((s) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lon, s.lat] }, properties: { name: s.name, stalls: s.stalls, kw: s.kw } })),
+    });
   }
 
   setFollow(on) {

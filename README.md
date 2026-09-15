@@ -10,6 +10,20 @@ No accounts, no API keys, no paid services. Everything is stored locally in your
 
 ---
 
+*for Andrew & Jenna ✦ by Andrew & Jenna*
+
+## What's new
+- **Opening screen:** an animated night drive with aurora, drifting fog, a Model 3 heading for the horizon and an A ✦ J constellation. It shows a personal greeting and your journey stats so far.
+- **Tap any place for the full story:** story cards, map pins, toasts and collection items open a full-screen pop-up. It has a large photo, key facts, the article in readable sections, a photo gallery, nearby places, live distance and direction, a Listen button, and a QR code that sends the location to your phone (share it to the Tesla app). Links inside the story open in the same pop-up with a back button.
+- **🚘 Car screen:** a live, animated Model 3 showing:
+  - speed arc, compass, headlights, brake lights and a g-force meter
+  - estimated energy use (Wh/mi, kWh used, regen, estimated range) from a physics model of your trim
+  - nearest Superchargers with direction arrows
+  - the car's software version and onboard computer, detected from the browser
+  - connectivity and latency, elevation profile, and the sun's position
+- **Sound that works:** a natural neural voice runs entirely in the browser (one-time 63 MB download), so stories play even when the car has no built-in speech voices. Chimes play for collections, quests and alerts. Settings → Sound has a Test button and troubleshooting tips.
+- **Superchargers on the map**, plus a ⚡ distance chip in the top bar.
+
 ## Features
 
 ### While driving (hands-off)

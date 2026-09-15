@@ -1,9 +1,10 @@
 // App-shell cache. Network first (so updates arrive immediately), falling
 // back to the cached copy when the car's connection drops. Map tiles and
 // data APIs are left to the network.
-const CACHE = 'uncharted-v2';
+const CACHE = 'uncharted-v3';
 const SHELL = [
-  './', 'index.html', 'css/app.css',
+  './', 'index.html', 'css/app.css', 'css/v2.css',
+  'js/intro.js', 'js/detail.js', 'js/tesla.js', 'js/audio.js', 'js/carview.js', 'js/tts-worker.js',
   'js/app.js', 'js/util.js', 'js/geo.js', 'js/sim.js', 'js/fog.js', 'js/map.js', 'js/glass.js', 'js/speech.js',
   'js/stories.js', 'js/place.js', 'js/trips.js', 'js/waze.js', 'js/quests.js', 'js/quiz.js', 'js/sheets.js',
   'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js',

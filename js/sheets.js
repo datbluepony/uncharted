@@ -5,6 +5,7 @@ import { escapeHtml, fmtDist, fmtDuration, fmtSpeed, settings, idb, ls, sleep } 
 import { CATS, RARITY } from './stories.js';
 import { CAT_COLORS } from './map.js';
 import { speech } from './speech.js';
+import { audio } from './audio.js';
 
 const CELL_KM2 = (0.0004 * 111320) ** 2 / 1e6;
 
@@ -19,7 +20,7 @@ const scoreColor = (s) => (s >= 90 ? 'var(--accent2)' : s >= 75 ? 'var(--warn)' 
 const when = (t) => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 // ---------------- Collection ----------------
-export function renderCollection(root, { stories, place, mapView, closeSheet }) {
+export function renderCollection(root, { stories, place, mapView, closeSheet, openDetail }) {
   let filter = 'all';
   const draw = () => {
     const items = Object.values(stories.collection).sort((a, b) => b.gotAt - a.gotAt);
@@ -58,6 +59,7 @@ export function renderCollection(root, { stories, place, mapView, closeSheet }) 
     root.querySelectorAll('.filters button').forEach((b) => (b.onclick = () => { filter = b.dataset.f; draw(); }));
     root.querySelectorAll('.item').forEach((el) => {
       const id = el.dataset.id;
+      el.onclick = (e) => !e.target.closest('button') && openDetail(id);
       el.querySelector('[data-act=tell]').onclick = () => stories.tell(id);
       el.querySelector('[data-act=map]').onclick = () => {
         const p = stories.collection[id];
@@ -81,7 +83,7 @@ export function renderQuests(root, { quests, deps }) {
     </div>`;
   root.innerHTML = `
     <div class="wrapped">
-      <h2>Level ${q.level} · ${q.title}</h2>
+      <h2>Andrew &amp; Jenna · Level ${q.level} ${q.title}</h2>
       <div class="xp"><b>${q.xp.toLocaleString()}</b> XP · ${(q.nextXp - q.xp).toLocaleString()} to level ${q.level + 1}</div>
       <div class="bar" style="height:14px"><i style="width:${Math.round(q.levelPct * 100)}%"></i></div>
     </div>
@@ -103,7 +105,7 @@ export function renderTrips(root, deps) {
 
   root.innerHTML = `
     <div class="wrapped">
-      <h2>🗓️ Your week on the road</h2>
+      <h2>🗓️ Andrew &amp; Jenna's week on the road</h2>
       <div class="stats" style="margin:0">
         <div class="stat"><b>${fmtDist(miles)}</b><small>Driven</small></div>
         <div class="stat"><b>${week.length}</b><small>Drives</small></div>
@@ -174,7 +176,8 @@ export async function renderRecap(root, deps, trip) {
         el.className = 'poi recap-mk';
         el.style.color = CAT_COLORS[p.cat];
         new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
-        side.insertAdjacentHTML('afterbegin', `<div class="trip recap-pop"><div style="font-size:30px">${CATS[p.cat].icon}</div><div class="tb"><h3>${escapeHtml(p.title)}</h3><p>${escapeHtml(p.desc || '')}</p></div></div>`);
+        side.insertAdjacentHTML('afterbegin', `<div class="trip recap-pop" data-id="${p.id}" style="cursor:pointer"><div style="font-size:30px">${CATS[p.cat].icon}</div><div class="tb"><h3>${escapeHtml(p.title)}</h3><p>${escapeHtml(p.desc || '')}</p></div></div>`);
+        side.firstElementChild.onclick = () => deps.openDetail?.(p.id);
       }
       await sleep(Math.max(12, 7000 / steps));
     }
@@ -208,7 +211,20 @@ export function renderSettings(root, deps) {
     <div class="set-row"><div class="sl"><b>Story length</b><span></span></div>${seg('storyLength', [['short', 'Short'], ['long', 'Long']])}</div>
     <div class="set-row"><div class="sl"><b>Categories</b><span>What gets collected and narrated</span></div>
       <div class="filters" style="margin:0">${Object.entries(CATS).map(([k, c]) => `<button data-cat="${k}" class="${s.categories[k] ? 'on' : ''}">${c.icon} ${c.label}</button>`).join('')}</div></div>
-    <div class="set-row"><div class="sl"><b>Test voice</b><span>${speech.available ? 'Plays through the car speakers' : 'Speech is not available in this browser'}</span></div><button class="btn" id="sTest">🔊 Test</button></div>
+    <h2 class="sec">Sound</h2>
+    <div class="set-row"><div class="sl"><b>Voice engine</b><span>Auto uses the car's built-in voices if it has any, otherwise the natural voice</span></div>${seg('voiceEngine', [['auto', 'Auto'], ['browser', 'Car voices'], ['natural', 'Natural']])}</div>
+    <div class="set-row"><div class="sl"><b>Voice status</b><div class="voice-status" id="sVoice">…</div><div class="voice-bar hidden" id="sVoiceBar"><i></i></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn ghost" id="sVoiceDl">⬇ Natural voice</button><button class="btn" id="sTest">🔊 Test sound</button></div></div>
+    <div class="set-row"><div class="sl"><b>Sound effects</b><span>Chimes for collections, quests and alerts</span></div>${tog('sfx')}</div>
+    <div class="set-row"><div class="sl"><b>No sound in the car?</b>
+      <ul class="tips">
+        <li>Many Tesla software versions only play browser audio while the car is in Park.</li>
+        <li>Tap <b>Test sound</b>. If you hear the chime but no voice, set Voice engine to <b>Natural</b>.</li>
+        <li>Still silent? Start and pause any media (radio, Spotify) or disconnect phone Bluetooth audio, then test again.</li>
+        <li>Check the media volume, not the navigation volume.</li>
+      </ul></div></div>
+    <h2 class="sec">Your car</h2>
+    <div class="set-row"><div class="sl"><b>Model 3 trim</b><span>Used for the energy estimate (2022–2023 models)</span></div>${seg('trim', [['rwd', 'RWD'], ['lr', 'Long Range'], ['perf', 'Performance']])}</div>
     <h2 class="sec">Alerts</h2>
     <div class="set-row"><div class="sl"><b>Spoken alerts</b><span>Speed and red-light cameras (OpenStreetMap), plus feed alerts</span></div>${tog('alertVoice')}</div>
     <div class="set-row"><div class="sl"><b>Alert feed URL (advanced, optional)</b><span>A proxy that returns Waze live-map JSON for spoken police/crash alerts. See README.</span></div>
@@ -217,12 +233,14 @@ export function renderSettings(root, deps) {
     <div class="diag" id="sDiag">…</div>
     <h2 class="sec">Data</h2>
     <div class="set-row"><div class="sl"><b>Reset everything</b><span>Fog map, collection, trips, quests. Can't be undone.</span></div><button class="btn danger" id="sReset">Reset</button></div>
-    <p class="muted small" style="margin-top:24px">Map © OpenStreetMap contributors © CARTO · Places © Wikipedia (CC BY-SA) · Weather Open-Meteo · Live traffic embed © Waze</p>`;
+    <div class="made-for">for Andrew &amp; Jenna <i>✦</i> by Andrew &amp; Jenna</div>
+    <p class="muted small" style="margin-top:8px;text-align:center">Map © OpenStreetMap contributors © CARTO · Places © Wikipedia (CC BY-SA) · Weather &amp; elevation Open-Meteo · Superchargers supercharge.info · Voice Piper (MIT) · Live traffic embed © Waze</p>`;
 
   root.querySelectorAll('.seg').forEach((el) => el.querySelectorAll('button').forEach((b) => (b.onclick = () => {
     const raw = b.dataset.v;
     const v = raw === 'true' ? true : raw === 'false' ? false : /^\d+$/.test(raw) ? +raw : raw;
     settings.set({ [el.dataset.key]: v });
+    if (el.dataset.key === 'voiceEngine') speech.init();
     renderSettings(root, deps);
   })));
   root.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => {
@@ -230,7 +248,12 @@ export function renderSettings(root, deps) {
     renderSettings(root, deps);
   }));
   root.querySelector('#sFeed').onchange = (e) => settings.set({ wazeFeedUrl: e.target.value.trim() });
-  root.querySelector('#sTest').onclick = () => speech.say('Uncharted voice check. Every road you drive clears the fog.', { priority: true, kind: 'alert' });
+  root.querySelector('#sTest').onclick = () => {
+    audio.unlock();
+    if (!speech.engine) speech.init();
+    speech.test();
+  };
+  root.querySelector('#sVoiceDl').onclick = () => speech.neural.prepare();
   let armed = false;
   root.querySelector('#sReset').onclick = async (e) => {
     if (!armed) {
@@ -246,6 +269,13 @@ export function renderSettings(root, deps) {
   const diag = root.querySelector('#sDiag');
   const tick = async () => {
     if (!document.body.contains(diag)) return;
+    const vs = speech.status();
+    const label = { native: 'Car voices', neural: 'Natural voice', none: 'None' }[vs.engine] || 'Starts when you tap Start';
+    root.querySelector('#sVoice').textContent = `${label} · car voices found: ${vs.nativeVoices} · natural voice: ${
+      vs.neuralReady ? 'ready' : vs.downloading ? `downloading ${Math.round(vs.progress * 100)}%` : vs.error ? 'error — ' + vs.error : 'not downloaded'} · audio ${vs.audio}`;
+    root.querySelector('#sVoiceBar').classList.toggle('hidden', !vs.downloading);
+    root.querySelector('#sVoiceBar i').style.width = `${Math.round(vs.progress * 100)}%`;
+    root.querySelector('#sVoiceDl').classList.toggle('hidden', vs.neuralReady);
     const f = deps.getFix();
     let storage = '';
     try {
@@ -258,7 +288,9 @@ export function renderSettings(root, deps) {
       `Position        : ${f ? `${f.lat.toFixed(5)}, ${f.lon.toFixed(5)}  ±${Math.round(f.acc)} m` : '—'}`,
       `Speed / heading : ${f ? `${f.speed.toFixed(1)} m/s  /  ${f.heading == null ? '—' : Math.round(f.heading) + '°'}` : '—'}`,
       `Update rate     : ${f ? f.rate.toFixed(2) + ' Hz' : '—'}`,
-      `Speech          : ${speech.available ? `yes (${speechSynthesis.getVoices().length} voices)` : 'NOT available'}`,
+      `Voice engine    : ${speech.engine || 'not started'} · car voices ${window.speechSynthesis ? speechSynthesis.getVoices().length : 0} · natural ${speech.neural.ready ? 'ready' : 'not loaded'} (${speech.neural.mode || '—'})`,
+      `Audio output    : ${audio.state}`,
+      `Tesla browser   : ${deps.car.isTesla ? `yes · ${deps.car.version}` : 'no'} · ${deps.car.computer}`,
       `WebGL           : ${gl ? 'yes' : 'NO'}`,
       `Screen          : ${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
       `Storage         : ${storage || '—'}`,
