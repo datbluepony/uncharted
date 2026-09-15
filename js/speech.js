@@ -255,6 +255,7 @@ function speakNative(text) {
     const u = new SpeechSynthesisUtterance(text);
     if (voice) u.voice = voice;
     u.rate = 1.02;
+    u.volume = Math.min(1, settings.get().volume ?? 1);
     u.onend = u.onerror = () => resolve();
     synth.speak(u);
     // Chromium sometimes never fires onend.

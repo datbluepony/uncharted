@@ -10,7 +10,13 @@ import { bus, idb, distance, fetchJSON, settings } from './util.js';
 // ---------------- Detection ----------------
 export function detectCar() {
   const ua = navigator.userAgent;
-  const m = ua.match(/Tesla\/([\w.]+?)(?:-([0-9a-f]{6,}))?(?:\s|$)/i);
+  // Formats seen: "Tesla/2022.12.3.5-94b3e58df11e", "Tesla/DEV-BUILD-…",
+  // "Tesla/2026.20.200.1 TESLA_AUTO_1960450_2025_TESLA_MODEL3"
+  const tok = ua.match(/Tesla\/(\S+)/i)?.[1] || null;
+  const tm = tok?.match(/^(\d{4}\.[\d.]+?)(?:-([0-9a-z]+))?$/i);
+  const m = tok ? [null, tm ? tm[1] : tok, tm?.[2] || null] : /TESLA_AUTO|QtCarBrowser/i.test(ua) ? [null, null, null] : null;
+  const auto = ua.match(/TESLA_AUTO_\d+_(\d{4})_TESLA_([A-Z0-9]+)/i);
+  const MODELS = { MODEL3: 'Model 3', MODELY: 'Model Y', MODELS: 'Model S', MODELX: 'Model X', CYBERTRUCK: 'Cybertruck' };
   const chromium = (ua.match(/Chrom(?:ium|e)\/(\d+)/) || [])[1];
   let gpu = '';
   try {
@@ -35,6 +41,9 @@ export function detectCar() {
   }
   return {
     isTesla,
+    ua,
+    model: auto ? MODELS[auto[2].toUpperCase()] || auto[2] : null,
+    modelYear: auto ? +auto[1] : null,
     version,
     build: m?.[2] || null,
     released,

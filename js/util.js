@@ -148,6 +148,8 @@ const DEFAULTS = {
   sfx: true,
   voiceEngine: 'auto', // auto | browser | natural
   trim: 'lr', // rwd | lr | perf (energy estimate)
+  volume: 1, // 0..2 master volume
+  wazeDark: true,
 };
 let current = { ...DEFAULTS, ...ls.get('settings', {}) };
 current.categories = { ...DEFAULTS.categories, ...(current.categories || {}) };

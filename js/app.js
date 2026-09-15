@@ -19,6 +19,7 @@ import { Intro } from './intro.js';
 import { Detail } from './detail.js';
 import { detectCar, Connectivity, Elevation, Energy, Superchargers } from './tesla.js';
 import { CarView } from './carview.js';
+import { SkyTab } from './sky/skytab.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -66,6 +67,27 @@ const deps = {
   getEnergy: () => lastEnergy,
 };
 const carView = new CarView(deps);
+const skyTab = new SkyTab($('skyView'), {
+  getFix: () => fix,
+  detail,
+  audio,
+  isLocked: () => trips.moving && !passenger,
+  unlockPassenger: () => (passenger = true),
+  onClose: () => closeSky(),
+  metric: () => settings.get().units === 'metric',
+});
+function openSky() {
+  closeSheet();
+  alerts.toggle(false);
+  setDock('sky');
+  mapView.covered = true;
+  skyTab.show();
+}
+function closeSky() {
+  skyTab.hide();
+  mapView.covered = false;
+  setDock('drive');
+}
 
 // ---------- UI helpers ----------
 function toast(html, cls = '', ms = 5000) {
@@ -168,6 +190,11 @@ document.querySelectorAll('#dock [data-tab]').forEach((b) => {
   b.onclick = () => {
     const tab = b.dataset.tab;
     if (detail.open) detail.close();
+    if (tab === 'sky') return skyTab.open ? closeSky() : openSky();
+    if (skyTab.open) {
+      skyTab.hide();
+      mapView.covered = false;
+    }
     if (tab === 'drive') {
       closeSheet();
       alerts.toggle(false);
@@ -198,6 +225,7 @@ function applySettings(s) {
   $('voiceBtn').classList.toggle('on', s.voice);
   $('glassBox').classList.toggle('hidden', !s.showGlass);
   $('speedUnit').textContent = s.units === 'metric' ? 'km/h' : 'mph';
+  $('wazeFrame').classList.toggle('dark', s.wazeDark !== false);
   mapView.setPlaces(visiblePlaces());
   if (fix) mapView.update(fix, true);
 }
@@ -285,6 +313,7 @@ bus.on('fix', (f) => {
   energy.onFix(f, place.weather?.tempF);
   elevation.onFix(f, f.altitude);
   superchargers.onFix(f);
+  skyTab.onFix(f);
 });
 
 bus.on('gps', (g) => {
@@ -372,6 +401,7 @@ bus.on('trip-end', (t) => {
 });
 bus.on('motion', () => {
   if (!$('sheet').classList.contains('hidden')) renderSheetBody();
+  if (skyTab.open && trips.moving && !passenger) skyTab.show();
 });
 
 // Car data
@@ -479,4 +509,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Expose for debugging from the console.
-window.uncharted = { fog, mapView, glass, stories, place, trips, alerts, quests, settings, bus, RARITY, detail, carView, energy, elevation, superchargers, speech, audio, car, conn };
+window.uncharted = { fog, mapView, glass, stories, place, trips, alerts, quests, settings, bus, RARITY, detail, carView, energy, elevation, superchargers, speech, audio, car, conn, skyTab };

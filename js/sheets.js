@@ -215,7 +215,9 @@ export function renderSettings(root, deps) {
     <div class="set-row"><div class="sl"><b>Voice engine</b><span>Auto uses the car's built-in voices if it has any, otherwise the natural voice</span></div>${seg('voiceEngine', [['auto', 'Auto'], ['browser', 'Car voices'], ['natural', 'Natural']])}</div>
     <div class="set-row"><div class="sl"><b>Voice status</b><div class="voice-status" id="sVoice">…</div><div class="voice-bar hidden" id="sVoiceBar"><i></i></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn ghost" id="sVoiceDl">⬇ Natural voice</button><button class="btn" id="sTest">🔊 Test sound</button></div></div>
-    <div class="set-row"><div class="sl"><b>Sound effects</b><span>Chimes for collections, quests and alerts</span></div>${tog('sfx')}</div>
+    <div class="set-row"><div class="sl"><b>Volume</b><span>Chimes and the natural voice. Boost up to 200% if the car is too quiet.</span></div>
+      <div class="vol-row"><input type="range" id="sVol" min="0" max="200" step="5" value="${Math.round((s.volume ?? 1) * 100)}"><span class="vol-val" id="sVolVal">${Math.round((s.volume ?? 1) * 100)}%</span></div></div>
+    <div class="set-row"><div class="sl"><b>Sound effects</b><span>A soft ding when something interesting pops up, plus quest and alert chimes</span></div>${tog('sfx')}</div>
     <div class="set-row"><div class="sl"><b>No sound in the car?</b>
       <ul class="tips">
         <li>Many Tesla software versions only play browser audio while the car is in Park.</li>
@@ -226,6 +228,7 @@ export function renderSettings(root, deps) {
     <h2 class="sec">Your car</h2>
     <div class="set-row"><div class="sl"><b>Model 3 trim</b><span>Used for the energy estimate (2022–2023 models)</span></div>${seg('trim', [['rwd', 'RWD'], ['lr', 'Long Range'], ['perf', 'Performance']])}</div>
     <h2 class="sec">Alerts</h2>
+    <div class="set-row"><div class="sl"><b>Dark Waze map</b><span>Dims the bright Waze live map to match the app</span></div>${tog('wazeDark')}</div>
     <div class="set-row"><div class="sl"><b>Spoken alerts</b><span>Speed and red-light cameras (OpenStreetMap), plus feed alerts</span></div>${tog('alertVoice')}</div>
     <div class="set-row"><div class="sl"><b>Alert feed URL (advanced, optional)</b><span>A proxy that returns Waze live-map JSON for spoken police/crash alerts. See README.</span></div>
       <input type="text" id="sFeed" placeholder="https://your-proxy.example/georss" value="${escapeHtml(s.wazeFeedUrl)}"></div>
@@ -254,6 +257,15 @@ export function renderSettings(root, deps) {
     speech.test();
   };
   root.querySelector('#sVoiceDl').onclick = () => speech.neural.prepare();
+  const vol = root.querySelector('#sVol');
+  vol.oninput = () => {
+    root.querySelector('#sVolVal').textContent = `${vol.value}%`;
+    settings.set({ volume: +vol.value / 100 });
+  };
+  vol.onchange = () => {
+    audio.unlock();
+    audio.sfx('ding', true);
+  };
   let armed = false;
   root.querySelector('#sReset').onclick = async (e) => {
     if (!armed) {

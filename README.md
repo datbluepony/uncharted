@@ -24,6 +24,22 @@ No accounts, no API keys, no paid services. Everything is stored locally in your
 - **Sound that works:** a natural neural voice runs entirely in the browser (one-time 63 MB download), so stories play even when the car has no built-in speech voices. Chimes play for collections, quests and alerts. Settings → Sound has a Test button and troubleshooting tips.
 - **Superchargers on the map**, plus a ⚡ distance chip in the top bar.
 
+## 🌌 Sky tab
+- **Live star map:** oriented to where the car is pointing, with an **AHEAD** marker and compass on the horizon. It shows 5,044 real stars (sized by brightness and colored by temperature), constellation lines and names, and the famous shapes: Big Dipper, Little Dipper, Orion's Belt, Summer and Winter Triangles, Great Square, Northern Cross, the Teapot. It also shows the planets, the Moon with its real phase, deep-sky objects, a Milky Way glowing where it really is, and twilight colors from the Sun's position.
+- **Interactive:** drag to look around (with momentum), pinch or scroll to zoom, double-tap to zoom in, **Car view** to snap back to the windshield, and **Look up** for overhead.
+- **Tap anything:** the card tells you exactly where to look ("52° up, ahead to the right"), plus distance, what year the light left the star, rise and set times and a fact. **Full story** opens the Wikipedia article.
+- **Find buttons:** jump to the Moon, the North Star, the Big Dipper and whatever planets are up right now. With the Big Dipper selected, an animated line follows the pointer stars to Polaris.
+- **Time travel:** a slider moves ±12 hours, and ⏩ plays a time-lapse of the sky turning.
+- **Solar System view:** real planet positions for today, orbits, the asteroid belt, a pulse showing sunlight's 8-minute trip, and time-lapse up to 1 year per second.
+- **Galaxy view:** the Milky Way with "You are here" on the Orion Spur, and a live count of how far you've traveled around the galaxy.
+- **Cosmic speedometer:** your car vs Earth's spin vs Earth's orbit vs the Sun's orbit around the galaxy.
+- **Night vision** red mode. Data: d3-celestial star catalog and astronomy-engine, both free and cached for offline use.
+
+## Sound & Waze
+- **Volume slider:** Settings → Sound, 0–200%, with a compressor so boosting doesn't distort.
+- **Soft chime:** a gentle bell rings whenever a place pops up. Tap the card, its notification, or a map pin to read more.
+- **Dark Waze:** the Waze live map is dimmed to match the app (toggle in Settings → Alerts).
+
 ## Features
 
 ### While driving (hands-off)

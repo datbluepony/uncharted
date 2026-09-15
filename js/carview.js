@@ -47,7 +47,7 @@ export class CarView {
         <div class="car-ident">
           <span class="pulse-dot ${car.isTesla ? 'ok' : ''}"></span>
           <div><b>${car.isTesla ? 'Tesla detected' : 'Preview mode'}</b>
-          <small>Model 3 ${escapeHtml(trim.label)} · 2022–2023${car.version ? ` · v${escapeHtml(car.version)}` : ''}</small></div>
+          <small>${car.modelYear ? car.modelYear + ' ' : ''}${escapeHtml(car.model || 'Model 3')} ${escapeHtml(trim.label)}${car.version ? ` · v${escapeHtml(car.version)}` : ''}</small></div>
         </div>
         <svg class="car-svg" viewBox="0 0 600 640" aria-hidden="true">
           <defs>
@@ -142,11 +142,14 @@ export class CarView {
         <div class="cc">
           <h3>🚘 Software</h3>
           ${car.isTesla ? `
-            <div class="ver-big">${escapeHtml(car.version)}</div>
+            <div class="ver-big">${escapeHtml(car.version || 'Tesla')}</div>
+            ${car.model ? `<div class="kv"><small>Vehicle</small><b>${car.modelYear || ''} ${escapeHtml(car.model)}</b></div>` : ''}
             <div class="kv"><small>Released</small><b>${car.released || '—'}${car.holiday ? ' · 🎄 Holiday update' : ''}</b></div>
             <div class="kv"><small>Build</small><b class="mono">${escapeHtml(car.build || '—')}</b></div>`
           : `<div class="ver-big muted">Not in a Tesla</div><p class="muted small">Open Uncharted in the Model 3's browser to read the car's software version and computer.</p>`}
           <div class="kv"><small>Time zone</small><b>${escapeHtml(car.timezone)}</b></div>
+          <details class="ua-raw"><summary>What this browser reports</summary><code>${escapeHtml(car.ua)}</code>
+            <p class="muted small">Browsers can read the software version and computer, but not battery, range, tire pressure or climate. Those need Tesla's paid Fleet API.</p></details>
         </div>
 
         <div class="cc">

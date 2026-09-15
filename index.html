@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/v2.css">
+<link rel="stylesheet" href="css/sky.css">
 </head>
 <body>
 <div id="map"></div>
@@ -56,7 +57,7 @@
     <div class="story-kicker"><span id="storyCat">History</span> · <span id="storyDist">0.3 mi</span></div>
     <h2 id="storyTitle">—</h2>
     <p id="storyText">—</p>
-    <div class="story-more">Tap for the full story ›</div>
+    <div class="story-read">📖 Read more</div>
   </div>
   <button class="story-x" id="storyClose" aria-label="Dismiss">✕</button>
   <div class="story-timer" id="storyTimer"></div>
@@ -103,6 +104,9 @@
   </div>
 </section>
 
+<!-- Sky: live star map, solar system and galaxy -->
+<section id="skyView" class="hidden"></section>
+
 <!-- Place detail pop-up -->
 <div id="modal" class="hidden" role="dialog" aria-modal="true">
   <div class="modal-backdrop"></div>
@@ -117,6 +121,7 @@
 <nav id="dock">
   <button data-tab="drive" class="active"><i>🧭</i><span>Drive</span></button>
   <button data-tab="car"><i>🚘</i><span>Car</span></button>
+  <button data-tab="sky"><i>🌌</i><span>Sky</span></button>
   <button data-tab="waze"><i>🚓</i><span>Waze</span></button>
   <button data-tab="collection"><i>💎</i><span>Collection</span></button>
   <button data-tab="quests"><i>🏁</i><span>Quests</span></button>
