@@ -228,16 +228,18 @@ export function renderSettings(root, deps) {
     <h2 class="sec">Your car</h2>
     <div class="set-row"><div class="sl"><b>Model 3 trim</b><span>Used for the energy estimate (2022–2023 models)</span></div>${seg('trim', [['rwd', 'RWD'], ['lr', 'Long Range'], ['perf', 'Performance']])}</div>
     <h2 class="sec">Alerts</h2>
-    <div class="set-row"><div class="sl"><b>Dark Waze map</b><span>Dims the bright Waze live map to match the app</span></div>${tog('wazeDark')}</div>
-    <div class="set-row"><div class="sl"><b>Spoken alerts</b><span>Speed and red-light cameras (OpenStreetMap), plus feed alerts</span></div>${tog('alertVoice')}</div>
-    <div class="set-row"><div class="sl"><b>Alert feed URL (advanced, optional)</b><span>A proxy that returns Waze live-map JSON for spoken police/crash alerts. See README.</span></div>
-      <input type="text" id="sFeed" placeholder="https://your-proxy.example/georss" value="${escapeHtml(s.wazeFeedUrl)}"></div>
+    <div class="set-row"><div class="sl"><b>Alert distance</b><span>How far ahead police, crashes and closures trigger an alert</span></div>${seg('alertMiles', [[1, '1 mi'], [2, '2 mi'], [3, '3 mi']])}</div>
+    <div class="set-row"><div class="sl"><b>Screen flash</b><span>Red and blue edge strobe for police, red for crashes, amber for hazards</span></div>${tog('alertFlash')}</div>
+    <div class="set-row"><div class="sl"><b>Spoken alerts</b><span>Read road alerts aloud</span></div>${tog('alertVoice')}</div>
+    <div class="set-row"><div class="sl"><b>Alert types</b><span>Live Florida 511 incidents, weather warnings and enforcement cameras</span></div>
+      <div class="filters" style="margin:0">${[['police', '🚓 Police'], ['crash', '💥 Crashes'], ['closure', '⛔ Closures'], ['hazard', '⚠️ Hazards'], ['disabled', '🚗 Disabled'], ['work', '🚧 Road work'], ['traffic', '🐢 Traffic'], ['camera', '📷 Cameras']]
+        .map(([k, l]) => `<button data-atype="${k}" class="${s.alertTypes?.[k] !== false ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <h2 class="sec">Diagnostics</h2>
     <div class="diag" id="sDiag">…</div>
     <h2 class="sec">Data</h2>
     <div class="set-row"><div class="sl"><b>Reset everything</b><span>Fog map, collection, trips, quests. Can't be undone.</span></div><button class="btn danger" id="sReset">Reset</button></div>
     <div class="made-for">for Andrew &amp; Jenna <i>✦</i> by Andrew &amp; Jenna</div>
-    <p class="muted small" style="margin-top:8px;text-align:center">Map © OpenStreetMap contributors © CARTO · Places © Wikipedia (CC BY-SA) · Weather &amp; elevation Open-Meteo · Superchargers supercharge.info · Voice Piper (MIT) · Live traffic embed © Waze</p>`;
+    <p class="muted small" style="margin-top:8px;text-align:center">Map © OpenStreetMap contributors © CARTO · Places © Wikipedia (CC BY-SA) · Weather &amp; elevation Open-Meteo · Superchargers supercharge.info · Voice Piper (MIT) · Road incidents FDOT / FL511 · Weather alerts NWS</p>`;
 
   root.querySelectorAll('.seg').forEach((el) => el.querySelectorAll('button').forEach((b) => (b.onclick = () => {
     const raw = b.dataset.v;
@@ -250,7 +252,12 @@ export function renderSettings(root, deps) {
     settings.set({ categories: { ...settings.get().categories, [b.dataset.cat]: !settings.get().categories[b.dataset.cat] } });
     renderSettings(root, deps);
   }));
-  root.querySelector('#sFeed').onchange = (e) => settings.set({ wazeFeedUrl: e.target.value.trim() });
+  root.querySelectorAll('[data-atype]').forEach((b) => (b.onclick = () => {
+    const types = { ...(settings.get().alertTypes || {}) };
+    types[b.dataset.atype] = types[b.dataset.atype] === false;
+    settings.set({ alertTypes: types });
+    renderSettings(root, deps);
+  }));
   root.querySelector('#sTest').onclick = () => {
     audio.unlock();
     if (!speech.engine) speech.init();
@@ -308,7 +315,7 @@ export function renderSettings(root, deps) {
       `Storage         : ${storage || '—'}`,
       `Fog cells       : ${deps.fog.cells.size.toLocaleString()} (${deps.fog.areaKm2.toFixed(2)} km²)`,
       `Places known    : ${deps.stories.places.size} · collected ${Object.keys(deps.stories.collection).length}`,
-      `Cameras nearby  : ${deps.alerts.cameras.length} · feed alerts ${deps.alerts.feed.length}`,
+      `Road alerts     : FL511 ${deps.hazards.status.fdot} · cameras ${deps.hazards.status.cameras} · weather ${deps.hazards.status.weather}`,
       `Browser         : ${navigator.userAgent}`,
     ].join('\n');
     setTimeout(tick, 1000);

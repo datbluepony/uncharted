@@ -143,16 +143,18 @@ const DEFAULTS = {
   categories: { history: true, nature: true, town: true, culture: true, structure: true, oddity: true },
   showGlass: true,
   pitch: 60,
-  wazeFeedUrl: '', // optional proxy returning Waze georss JSON for spoken alerts
   alertVoice: true,
+  alertMiles: 2,
+  alertFlash: true,
+  alertTypes: { police: true, crash: true, closure: true, hazard: true, disabled: true, work: true, traffic: true, camera: true },
   sfx: true,
   voiceEngine: 'auto', // auto | browser | natural
   trim: 'lr', // rwd | lr | perf (energy estimate)
   volume: 1, // 0..2 master volume
-  wazeDark: true,
 };
 let current = { ...DEFAULTS, ...ls.get('settings', {}) };
 current.categories = { ...DEFAULTS.categories, ...(current.categories || {}) };
+current.alertTypes = { ...DEFAULTS.alertTypes, ...(current.alertTypes || {}) };
 export const settings = {
   get: () => current,
   set(patch) {

@@ -10,20 +10,25 @@
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/v2.css">
 <link rel="stylesheet" href="css/sky.css">
+<link rel="stylesheet" href="css/map.css">
 </head>
 <body>
 <div id="map"></div>
 
 <!-- Car marker, fixed at the follow-camera focal point -->
 <div id="car" aria-hidden="true">
+  <div class="car-radar"></div>
   <div class="car-pulse"></div>
-  <svg viewBox="0 0 64 64" width="64" height="64">
+  <svg viewBox="0 0 52 116">
     <defs>
-      <linearGradient id="carg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#9fe8ff"/><stop offset="1" stop-color="#2a8cff"/>
-      </linearGradient>
+      <linearGradient id="carBody" x1="0" x2="1"><stop offset="0" stop-color="#1667c9"/><stop offset=".5" stop-color="#8fdcff"/><stop offset="1" stop-color="#1667c9"/></linearGradient>
+      <linearGradient id="carBeam" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#dff6ff" stop-opacity=".7"/><stop offset="1" stop-color="#dff6ff" stop-opacity="0"/></linearGradient>
     </defs>
-    <path d="M32 4 L54 56 L32 45 L10 56 Z" fill="url(#carg)" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+    <path class="car-beam" d="M17 38 L3 0 L49 0 L35 38 Z" fill="url(#carBeam)"/>
+    <path d="M26 36 C35 36 39 41 40 47 L41 71 C41 81 38 86 33 87 L19 87 C14 86 11 81 11 71 L12 47 C13 41 17 36 26 36 Z" fill="url(#carBody)" stroke="#fff" stroke-width="1.6"/>
+    <path d="M26 49 C32 49 34 51 34 55 L34 72 C34 75 31 77 26 77 C21 77 18 75 18 72 L18 55 C18 51 20 49 26 49 Z" fill="#081322" opacity=".88"/>
+    <path d="M15 41 Q19 38 23 38 M37 41 Q33 38 29 38" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <path d="M14 85 Q26 89 38 85" stroke="#ff3050" stroke-width="2.4" stroke-linecap="round" fill="none"/>
   </svg>
 </div>
 
@@ -42,6 +47,10 @@
     <div id="scChip" class="chip hidden" title="Nearest Supercharger">⚡ <b id="scChipVal">—</b></div>
   </div>
   <div class="tb-right">
+    <div class="lvl" id="lvl" title="Your level">
+      <div class="lvl-ring"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" id="lvlFg" cx="18" cy="18" r="15" stroke-dasharray="0 999"/></svg><b id="lvlNum">1</b></div>
+      <span id="lvlTitle">Rookie</span>
+    </div>
     <div class="monogram" title="Andrew &amp; Jenna">A<i>✦</i>J</div>
     <div id="weather" class="chip muted">—</div>
     <div id="sun" class="chip muted">—</div>
@@ -63,8 +72,14 @@
   <div class="story-timer" id="storyTimer"></div>
 </aside>
 
-<!-- Alert banner (cameras / feed alerts) -->
-<div id="alert" class="hidden"><span id="alertIcon">⚠️</span><span id="alertText"></span></div>
+<!-- Road alerts: edge strobe + banner -->
+<div id="threatFlash"></div>
+<div id="hzBanner" class="hidden">
+  <div class="hb-icon" id="hbIcon">⚠️</div>
+  <div class="hb-body"><div class="hb-title" id="hbTitle"></div><div class="hb-desc" id="hbDesc"></div></div>
+  <div class="hb-dist" id="hbDist"></div>
+  <button class="hb-x" id="hbClose" aria-label="Dismiss">✕</button>
+</div>
 
 <!-- Glass of water -->
 <section id="glassBox" class="card">
@@ -75,16 +90,18 @@
   </div>
 </section>
 
-<!-- Waze live map side panel -->
-<section id="wazePanel" class="card hidden">
+<!-- Next discovery guide -->
+<div id="nextChip" class="hidden"><div class="nc-arrow" id="ncArrow">↑</div><div><small id="ncDist">Next discovery</small><b id="ncTitle">—</b></div></div>
+
+<!-- Road alerts panel -->
+<section id="alertsPanel" class="card hidden">
   <div class="panel-head">
-    <b>Waze Live</b>
-    <span class="muted" id="wazeMeta">police · crashes · hazards · traffic</span>
-    <button class="btn sm" id="wazeRecenter">Recenter</button>
-    <a class="btn sm ghost" id="wazeFull" target="_blank" rel="noopener" href="https://www.waze.com/live-map" style="text-decoration:none">Full screen ↗</a>
-    <button class="btn sm ghost" id="wazeClose">✕</button>
+    <b>🚨 Road alerts</b>
+    <span class="muted">police · crashes · hazards · cameras · weather</span>
+    <button class="btn sm ghost" id="apClose">✕</button>
   </div>
-  <iframe id="wazeFrame" title="Waze live map" allow="geolocation" referrerpolicy="no-referrer-when-downgrade"></iframe>
+  <div class="ap-list" id="apList"></div>
+  <div class="ap-src" id="apSrc"></div>
 </section>
 
 <!-- Full-screen sheets for parked / passenger modes -->
@@ -122,7 +139,7 @@
   <button data-tab="drive" class="active"><i>🧭</i><span>Drive</span></button>
   <button data-tab="car"><i>🚘</i><span>Car</span></button>
   <button data-tab="sky"><i>🌌</i><span>Sky</span></button>
-  <button data-tab="waze"><i>🚓</i><span>Waze</span></button>
+  <button data-tab="alerts"><i>🚨</i><span>Alerts</span><em class="dock-badge hidden" id="alertBadge">0</em></button>
   <button data-tab="collection"><i>💎</i><span>Collection</span></button>
   <button data-tab="quests"><i>🏁</i><span>Quests</span></button>
   <button data-tab="trips"><i>🛣️</i><span>Trips</span></button>

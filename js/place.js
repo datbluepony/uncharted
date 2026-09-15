@@ -41,15 +41,22 @@ export class Place {
     this.busy = true;
     try {
       let info = null;
+      // OpenStreetMap knows unincorporated communities (e.g. North Fort Myers)
+      // that other geocoders fold into the nearest city (Cape Coral).
       try {
+        const j = await fetchJSON(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2&zoom=14&addressdetails=1`);
+        const a = j.address || {};
+        const town = a.city || a.town || a.village || a.municipality || a.census_designated_place || '';
+        if (!town) throw new Error('no town');
+        const hood = [a.suburb, a.neighbourhood, a.quarter].find((n) => n && !/\b(mhp|rv|park|estates? mhp)\b/i.test(n) && n !== town) || '';
+        info = { town, hood, county: a.county || '', state: a.state || '', country: a.country || '' };
+      } catch {
         const j = await fetchJSON(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
         const admin = j.localityInfo?.administrative || [];
+        const cdp = (j.localityInfo?.informative || []).find((x) => /census designated place/i.test(x.description || ''))?.name;
         const county = admin.find((a) => a.adminLevel === 6)?.name || admin.find((a) => /county|parish|borough/i.test(a.description || a.name))?.name;
-        info = { town: j.city || j.locality || '', county: county || '', state: j.principalSubdivision || '', country: j.countryName || '' };
-      } catch {
-        const j = await fetchJSON(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2&zoom=12`);
-        const a = j.address || {};
-        info = { town: a.city || a.town || a.village || a.hamlet || a.suburb || '', county: a.county || '', state: a.state || '', country: a.country || '' };
+        const town = cdp && cdp === j.locality ? cdp : j.locality && !admin.some((a) => a.name === j.city && a.adminLevel === 8 && a.name !== j.locality) ? j.locality : j.city || j.locality || '';
+        info = { town, hood: '', county: county || '', state: j.principalSubdivision || '', country: j.countryName || '' };
       }
       this.info = info;
       this.track('towns', info.town && `${info.town}, ${info.state}`, '🏘️', 'New town');

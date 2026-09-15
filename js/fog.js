@@ -52,7 +52,9 @@ export class Fog {
     this.sprite = makeSprite();
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.canvas.height = SIZE;
-    this.ctx = this.canvas.getContext('2d');
+    // CPU-backed canvas: stamping cells never waits on the (busy) GPU; the
+    // finished texture is uploaded to WebGL only when it changes.
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
     this.paintBase();
   }
 
@@ -177,7 +179,12 @@ export class Fog {
     const y = ((mc.y - r.y0) / r.span) * SIZE;
     const rad = REVEAL_M * 1.35 * r.pxPerM;
     if (x < -rad || y < -rad || x > SIZE + rad || y > SIZE + rad) return false;
-    this.ctx.drawImage(this.sprite, x - rad, y - rad, rad * 2, rad * 2);
+    // Pre-sized sprite: an unscaled drawImage is much cheaper than a scaled one
+    if (!this.stamp || this.stampRad !== rad) {
+      this.stampRad = rad;
+      this.stamp = makeSprite(Math.ceil(rad * 2));
+    }
+    this.ctx.drawImage(this.stamp, Math.round(x - rad), Math.round(y - rad));
     return true;
   }
 
@@ -309,15 +316,16 @@ export class Fog {
   }
 }
 
-function makeSprite() {
+function makeSprite(size = 64) {
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.width = c.height = size;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  const h = size / 2;
+  const grad = g.createRadialGradient(h, h, 0, h, h, h);
   grad.addColorStop(0, 'rgba(0,0,0,1)');
   grad.addColorStop(0.55, 'rgba(0,0,0,0.9)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
+  g.fillRect(0, 0, size, size);
   return c;
 }

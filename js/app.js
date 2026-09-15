@@ -1,17 +1,17 @@
 // Uncharted: wires location → fog, map, storyteller, glass, trips, alerts,
 // car data, sound and UI.
-import { bus, ls, settings, fmtSpeed, fmtDist, escapeHtml } from './util.js';
+import { bus, ls, settings, fmtSpeed, fmtDist, escapeHtml, distance, bearing, angleDiff } from './util.js';
 import { GpsSource } from './geo.js';
 import { SimSource } from './sim.js';
 import { Fog } from './fog.js';
-import { MapView } from './map.js';
+import { MapView, CAT_COLORS } from './map.js';
 import { Glass } from './glass.js';
 import { speech } from './speech.js';
 import { audio } from './audio.js';
 import { Stories, CATS, RARITY } from './stories.js';
 import { Place } from './place.js';
 import { Trips } from './trips.js';
-import { Alerts } from './waze.js';
+import { Hazards, KINDS as HZ } from './hazards.js';
 import { Quests } from './quests.js';
 import { renderQuiz } from './quiz.js';
 import { renderCollection, renderQuests, renderTrips, renderSettings, disposeRecap } from './sheets.js';
@@ -32,7 +32,7 @@ const glass = new Glass($('glass'));
 const stories = new Stories();
 const place = new Place();
 const trips = new Trips();
-const alerts = new Alerts();
+const hazards = new Hazards();
 const quests = new Quests();
 const conn = new Connectivity();
 const elevation = new Elevation();
@@ -61,7 +61,7 @@ const detail = new Detail({
 const openDetail = (id) => detail.openPlace({ id });
 
 const deps = {
-  trips, stories, fog, place, alerts, mapView, car, conn, elevation, superchargers, glass, session, openDetail,
+  trips, stories, fog, place, hazards, mapView, car, conn, elevation, superchargers, glass, session, openDetail,
   getFix: () => fix,
   getGps: () => gpsState,
   getEnergy: () => lastEnergy,
@@ -78,7 +78,7 @@ const skyTab = new SkyTab($('skyView'), {
 });
 function openSky() {
   closeSheet();
-  alerts.toggle(false);
+  closeAlertsPanel();
   setDock('sky');
   mapView.covered = true;
   skyTab.show();
@@ -156,7 +156,7 @@ const SHEETS = {
 const LOCKED = new Set(['car', 'collection', 'quests', 'trips', 'quiz']);
 
 function openSheet(tab) {
-  alerts.toggle(false);
+  closeAlertsPanel();
   setDock(tab);
   $('sheet').classList.remove('hidden');
   mapView.covered = true;
@@ -178,7 +178,7 @@ function closeSheet() {
   mapView.covered = false;
   $('sheet').classList.add('hidden');
   $('sheetBody').innerHTML = '';
-  setDock(alerts.open ? 'waze' : 'drive');
+  setDock(alertsPanelOpen() ? 'alerts' : 'drive');
 }
 $('sheetClose').onclick = closeSheet;
 $('passengerBtn').onclick = () => {
@@ -197,12 +197,12 @@ document.querySelectorAll('#dock [data-tab]').forEach((b) => {
     }
     if (tab === 'drive') {
       closeSheet();
-      alerts.toggle(false);
+      closeAlertsPanel();
       setDock('drive');
       mapView.setFollow(true);
-    } else if (tab === 'waze') {
+    } else if (tab === 'alerts') {
       closeSheet();
-      setDock(alerts.toggle() ? 'waze' : 'drive');
+      setDock(toggleAlertsPanel() ? 'alerts' : 'drive');
     } else if (activeTab === tab && !$('sheet').classList.contains('hidden')) {
       closeSheet();
     } else {
@@ -210,10 +210,140 @@ document.querySelectorAll('#dock [data-tab]').forEach((b) => {
     }
   };
 });
-$('wazeClose').onclick = () => {
-  alerts.toggle(false);
+$('apClose').onclick = () => {
+  closeAlertsPanel();
   setDock('drive');
 };
+
+// ---------- Road alerts (FL511 incidents, NWS warnings, cameras) ----------
+let hazardList = [];
+let weatherList = [];
+let selectedHazard = null;
+let bannerHazard = null;
+let bannerTimer = null;
+let flashTimer = null;
+function alertsPanelOpen() {
+  return !$('alertsPanel').classList.contains('hidden');
+}
+function closeAlertsPanel() {
+  $('alertsPanel').classList.add('hidden');
+}
+function toggleAlertsPanel(force) {
+  const show = force ?? !alertsPanelOpen();
+  $('alertsPanel').classList.toggle('hidden', !show);
+  if (show) renderAlertsPanel();
+  return show;
+}
+const ago = (t) => {
+  if (!t) return '';
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+};
+function hazardWhere(h) {
+  if (!fix) return { d: null, rot: 0 };
+  return { d: distance(fix.lat, fix.lon, h.lat, h.lon), rot: bearing(fix.lat, fix.lon, h.lat, h.lon) - (fix.heading ?? 0) };
+}
+function renderAlertsPanel() {
+  if (!alertsPanelOpen()) return;
+  const items = hazardList.map((h) => ({ h, ...hazardWhere(h) })).sort((a, b) => (a.d ?? 1e9) - (b.d ?? 1e9)).slice(0, 60);
+  const sel = selectedHazard && items.find((x) => x.h.id === selectedHazard.id);
+  const detail = sel
+    ? `<div class="ap-detail" style="--c:${HZ[sel.h.kind].color}"><h3>${HZ[sel.h.kind].icon} ${escapeHtml(sel.h.title)}</h3><p>${escapeHtml(sel.h.desc)}</p>${sel.h.lanes ? `<p><b>${escapeHtml(sel.h.lanes)}</b></p>` : ''}
+       <p class="muted small">${sel.d != null ? fmtDist(sel.d) + ' away · ' : ''}${sel.h.updated ? 'updated ' + ago(sel.h.updated) + ' · ' : ''}${escapeHtml(sel.h.source)}</p></div>`
+    : '';
+  $('apList').innerHTML = `
+    ${weatherList.map((w) => `<div class="ap-weather"><b>⛈️ ${escapeHtml(w.title)}</b><small>${escapeHtml(w.desc)}</small></div>`).join('')}
+    ${detail}
+    ${items.length
+      ? items.map(({ h, d, rot }) => {
+          const k = HZ[h.kind];
+          return `<div class="ap-item ${sel?.h.id === h.id ? 'hot' : ''}" data-id="${escapeHtml(h.id)}" style="--c:${k.color}">
+            <div class="ai-icon">${k.icon}</div>
+            <div class="ai-body"><b>${escapeHtml(h.title)}</b><small>${escapeHtml([h.road, h.lanes || h.desc].filter(Boolean).join(' · '))}</small></div>
+            <div class="ai-dist">${d != null ? fmtDist(d) : ''}<br><i style="transform:rotate(${Math.round(rot)}deg)">↑</i></div></div>`;
+        }).join('')
+      : `<div class="ap-empty">✅ No road alerts near you right now.</div>`}`;
+  $('apList').querySelectorAll('[data-id]').forEach((el) => (el.onclick = () => {
+    selectedHazard = hazardList.find((x) => x.id === el.dataset.id);
+    if (selectedHazard) mapView.flyTo(selectedHazard.lat, selectedHazard.lon, 15.5);
+    renderAlertsPanel();
+  }));
+  $('apSrc').textContent = `Florida 511: ${hazards.status.fdot} · Weather: ${hazards.status.weather} · Cameras: ${hazards.status.cameras}`;
+}
+function updateAlertBadge() {
+  const near = fix ? hazardList.filter((h) => HZ[h.kind].prio >= 3 && distance(fix.lat, fix.lon, h.lat, h.lon) < 16000).length : 0;
+  const n = near + weatherList.length;
+  $('alertBadge').textContent = n;
+  $('alertBadge').classList.toggle('hidden', !n);
+}
+function showHazardBanner(h, d) {
+  const k = HZ[h.kind];
+  const b = $('hzBanner');
+  b.className = h.kind === 'police' ? 'police' : '';
+  b.style.setProperty('--c', k.color);
+  $('hbIcon').textContent = k.icon;
+  $('hbTitle').textContent = h.kind === 'police' ? 'Police reported ahead' : d != null ? `${h.title} ahead` : h.title;
+  $('hbDesc').textContent = [h.road, h.lanes || h.desc].filter(Boolean).join(' · ');
+  $('hbDist').innerHTML = d != null ? `${fmtDist(d)}<small>away</small>` : `<small>${escapeHtml(h.source)}</small>`;
+  bannerHazard = h;
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(hideHazardBanner, 20000);
+}
+function hideHazardBanner() {
+  $('hzBanner').classList.add('hidden');
+  bannerHazard = null;
+}
+function flash(kind, ms = 6000) {
+  if (!settings.get().alertFlash || !kind) return;
+  $('threatFlash').className = `on ${kind}`;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => ($('threatFlash').className = ''), ms);
+}
+$('hbClose').onclick = (e) => {
+  e.stopPropagation();
+  hideHazardBanner();
+  $('threatFlash').className = '';
+};
+$('hzBanner').onclick = () => {
+  if (!bannerHazard) return;
+  selectedHazard = bannerHazard;
+  closeSheet();
+  toggleAlertsPanel(true);
+  setDock('alerts');
+};
+
+// ---------- Level HUD + next discovery ----------
+let lastLevel = null;
+function updateLevel(q) {
+  $('lvlNum').textContent = q.level;
+  $('lvlFg').setAttribute('stroke-dasharray', `${(q.levelPct * 94.2).toFixed(1)} 999`);
+  $('lvlTitle').textContent = q.title;
+  if (lastLevel != null && q.level > lastLevel) {
+    const el = $('lvl');
+    el.classList.remove('levelup');
+    void el.offsetWidth;
+    el.classList.add('levelup');
+    audio.sfx('quest');
+    toast(`⭐ <span><b>Level ${q.level}!</b><br><span class="muted">${escapeHtml(q.title)}</span></span>`, 'gold', 7000);
+  }
+  lastLevel = q.level;
+}
+$('lvl').onclick = () => openSheet('quests');
+function updateNextChip(f) {
+  const el = $('nextChip');
+  const n = visiblePlaces()
+    .filter((p) => !p.got)
+    .map((p) => ({ p, d: distance(f.lat, f.lon, p.lat, p.lon), b: bearing(f.lat, f.lon, p.lat, p.lon) }))
+    .filter((x) => x.d < 4000 && (f.heading == null || f.speed < 2 || x.d < 400 || Math.abs(angleDiff(f.heading, x.b)) < 70))
+    .sort((a, b) => a.d - b.d)[0];
+  if (!n) return el.classList.add('hidden');
+  el.classList.remove('hidden');
+  el.style.setProperty('--c', CAT_COLORS[n.p.cat] || '#7cf7d4');
+  $('ncArrow').style.transform = `rotate(${Math.round(n.b - (f.heading ?? 0))}deg)`;
+  $('ncTitle').textContent = n.p.title;
+  $('ncDist').textContent = `Next discovery · ${fmtDist(n.d)}`;
+  el.onclick = () => openDetail(n.p.id);
+}
 $('voiceBtn').onclick = () => {
   const on = !settings.get().voice;
   settings.set({ voice: on });
@@ -225,7 +355,7 @@ function applySettings(s) {
   $('voiceBtn').classList.toggle('on', s.voice);
   $('glassBox').classList.toggle('hidden', !s.showGlass);
   $('speedUnit').textContent = s.units === 'metric' ? 'km/h' : 'mph';
-  $('wazeFrame').classList.toggle('dark', s.wazeDark !== false);
+  hazards.publish();
   mapView.setPlaces(visiblePlaces());
   if (fix) mapView.update(fix, true);
 }
@@ -282,7 +412,7 @@ tickClock();
 // ---------- Quests ----------
 function refreshQuests() {
   try {
-    quests.evaluate(deps);
+    updateLevel(quests.evaluate(deps));
   } catch (e) {
     console.warn('quests', e);
   }
@@ -309,7 +439,11 @@ bus.on('fix', (f) => {
   trips.onFix(f);
   stories.onFix(f);
   place.onFix(f);
-  alerts.onFix(f);
+  hazards.onFix(f);
+  mapView.updateBeacons(f, visiblePlaces());
+  updateNextChip(f);
+  updateAlertBadge();
+  if (alertsPanelOpen()) renderAlertsPanel();
   energy.onFix(f, place.weather?.tempF);
   elevation.onFix(f, f.altitude);
   superchargers.onFix(f);
@@ -338,13 +472,45 @@ bus.on('fog', ({ areaKm2 }) => {
 
 bus.on('trail', (pts) => mapView.setTrail(pts));
 bus.on('places', () => mapView.setPlaces(visiblePlaces()));
-bus.on('alerts', (list) => mapView.setAlerts(list));
+bus.on('hazards', (list) => {
+  hazardList = list;
+  mapView.setHazards(list, HZ);
+  renderAlertsPanel();
+  updateAlertBadge();
+});
+bus.on('weather-alerts', (list) => {
+  weatherList = list;
+  renderAlertsPanel();
+  updateAlertBadge();
+});
+bus.on('hazard-alert', ({ h, d }) => {
+  const k = HZ[h.kind];
+  if (k.prio < 2) return; // congestion: marker only
+  showHazardBanner(h, d);
+  flash(k.flash, h.kind === 'police' ? 15000 : 6000);
+  audio.sfx(h.kind === 'police' ? 'police' : k.prio >= 4 ? 'alert' : 'ding');
+  if (k.voice) {
+    const text = h.kind === 'police' ? `Police reported ahead, ${fmtDist(d)}.` : d != null ? `${h.title} ahead, ${fmtDist(d)}.` : `${h.title} in effect for your area.`;
+    speech.say(text, { priority: k.prio >= 4, kind: 'alert' });
+  }
+});
+bus.on('hazard-active', (a) => {
+  if (a && bannerHazard?.id === a.h.id) $('hbDist').innerHTML = `${fmtDist(a.d)}<small>away</small>`;
+  // Keep the red/blue strobe going while police remain ahead within range
+  if (a?.h.kind === 'police') flash('police', 4000);
+});
+bus.on('hazard-click', (h) => {
+  selectedHazard = h;
+  closeSheet();
+  toggleAlertsPanel(true);
+  setDock('alerts');
+});
 bus.on('follow', (on) => $('followBtn').classList.toggle('on', on));
 bus.on('settings', applySettings);
 
 bus.on('place', (info) => {
   $('placeName').textContent = info.town || info.county || info.state || 'Somewhere';
-  $('placeSub').textContent = [info.county, info.state].filter(Boolean).join(', ');
+  $('placeSub').textContent = [info.hood, info.county, info.state].filter(Boolean).join(', ');
 });
 bus.on('weather', (w) => {
   $('weather').textContent = `${w.icon} ${Math.round(settings.get().units === 'metric' ? ((w.tempF - 32) * 5) / 9 : w.tempF)}°`;
@@ -364,6 +530,8 @@ bus.on('collect', ({ place: p, distance: d, narrated, points }) => {
     stories.save();
   }
   audio.sfx(p.rarity === 'legendary' ? 'legendary' : p.rarity === 'rare' ? 'rare' : 'collect');
+  mapView.removeBeacon(p.id);
+  mapView.burst(p.lat, p.lon, `+${points} XP`, p.rarity === 'legendary' ? '#ffd66b' : CAT_COLORS[p.cat]);
   if (narrated) showStory(p, d);
   const cls = p.rarity === 'common' ? '' : 'gold';
   const t = toast(`${CATS[p.cat].icon} <span><b>${escapeHtml(p.title)}</b><br><span class="muted">${p.rarity !== 'common' ? p.rarity.toUpperCase() + ' · ' : ''}+${points} XP · tap for story</span></span>`, cls);
@@ -387,7 +555,6 @@ bus.on('quest-complete', (q) => {
   toast(`🏆 <span><b>Quest complete: ${escapeHtml(q.title)}</b><br><span class="muted">+${q.xp} XP</span></span>`, 'gold', 8000);
   speech.say(`Quest complete: ${q.title}.`);
 });
-bus.on('alert-ahead', () => audio.sfx('alert'));
 bus.on('trip-start', () => {
   glass.reset();
   energy.reset();
@@ -509,4 +676,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Expose for debugging from the console.
-window.uncharted = { fog, mapView, glass, stories, place, trips, alerts, quests, settings, bus, RARITY, detail, carView, energy, elevation, superchargers, speech, audio, car, conn, skyTab };
+window.uncharted = { fog, mapView, glass, stories, place, trips, hazards, quests, settings, bus, RARITY, detail, carView, energy, elevation, superchargers, speech, audio, car, conn, skyTab };

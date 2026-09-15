@@ -35,7 +35,21 @@ No accounts, no API keys, no paid services. Everything is stored locally in your
 - **Cosmic speedometer:** your car vs Earth's spin vs Earth's orbit vs the Sun's orbit around the galaxy.
 - **Night vision** red mode. Data: d3-celestial star catalog and astronomy-engine, both free and cached for offline use.
 
-## Sound & Waze
+## 🚨 Road alerts (on our own map, no Waze)
+- **Live Florida 511 incidents** from FDOT's public data service: police activity, emergency vehicles, crashes, closures, disabled vehicles, debris and hazards, road work, and congestion. They show as animated markers on the map, refreshed every 90 seconds.
+- **Police within your alert distance** (1–3 mi, default 2) flash red and blue on the screen edges, show a banner with a live distance countdown, and play a soft two-tone chime. Crashes and closures flash red; hazards flash amber.
+- **National Weather Service warnings** for your exact location (flood, tornado, severe storms).
+- **Speed and red-light cameras** from OpenStreetMap.
+- The **🚨 Alerts** tab lists everything nearby by distance, with direction arrows; tap one to fly to it.
+- Limits: police alerts cover only what Florida 511 reports (troopers and incidents on major roads). Crowd-reported police traps from Waze aren't available to outside apps.
+
+## 🗺️ Map look
+- Neon night basemap: glowing highways, deep water, 3D glass buildings, and an atmospheric horizon when tilted.
+- A new car icon with headlights and a radar sweep, and a light trail that fades in behind you.
+- Floating **loot beacons** over nearby undiscovered places. Rare and legendary ones have light pillars. Collecting one bursts **+XP** particles.
+- Level ring in the top bar, and a **Next discovery** guide with a direction arrow.
+
+## Sound
 - **Volume slider:** Settings → Sound, 0–200%, with a compressor so boosting doesn't distort.
 - **Soft chime:** a gentle bell rings whenever a place pops up. Tap the card, its notification, or a map pin to read more.
 - **Dark Waze:** the Waze live map is dimmed to match the app (toggle in Settings → Alerts).

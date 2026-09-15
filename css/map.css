@@ -1,0 +1,127 @@
+/* ======================= Map v4: car, beacons, alerts, HUD ======================= */
+
+/* Car: positioned by transform (GPU) at the follow point */
+#car { left: 0; top: 0; margin: 0; width: 0; height: 0; filter: none; transition: opacity .3s; will-change: transform; }
+#car svg { position: absolute; left: -26px; top: -58px; width: 52px; height: 116px; transform-origin: 26px 58px; transition: transform .35s ease-out; filter: drop-shadow(0 0 10px rgba(63,182,255,.8)) drop-shadow(0 6px 10px rgba(0,0,0,.6)); overflow: visible; }
+#car .car-beam { opacity: .35; transition: opacity .4s; }
+#car.moving .car-beam { opacity: .9; }
+#car .car-pulse { position: absolute; inset: auto; left: -46px; top: -46px; width: 92px; height: 92px; border-radius: 50%; border: 2px solid rgba(63,182,255,.55); animation: pulse 2.4s ease-out infinite; }
+.car-radar { position: absolute; left: 0; top: 0; width: 280px; height: 280px; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); }
+.car-radar::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(124,247,212,.18); box-shadow: inset 0 0 0 46px rgba(124,247,212,.03), inset 0 0 0 47px rgba(124,247,212,.09); }
+.car-radar::after { content: ""; position: absolute; inset: 0; border-radius: 50%; animation: radar 3.2s linear infinite;
+  background: conic-gradient(from 0deg, rgba(124,247,212,0) 0deg, rgba(124,247,212,0) 290deg, rgba(124,247,212,.2) 352deg, rgba(124,247,212,.38) 360deg); }
+@keyframes radar { to { transform: rotate(360deg); } }
+#car.stale .car-radar { display: none; }
+
+/* Loot beacons over nearby undiscovered places */
+.beacon { display: flex; flex-direction: column; align-items: center; cursor: pointer; animation: beaconIn .5s cubic-bezier(.2,.9,.2,1); }
+.beacon.bye { animation: beaconOut .4s ease-in forwards; }
+@keyframes beaconIn { from { opacity: 0; transform: translateY(20px) scale(.6); } }
+@keyframes beaconOut { to { opacity: 0; transform: translateY(-20px) scale(.6); } }
+.beacon .beam { position: absolute; bottom: 20px; width: 10px; height: 0; border-radius: 10px; background: linear-gradient(0deg, var(--c), transparent); opacity: .0; filter: blur(2px); }
+.beacon.rar-rare .beam { height: 90px; opacity: .45; }
+.beacon.rar-legendary .beam { height: 150px; width: 16px; opacity: .7; animation: beamPulse 1.8s ease-in-out infinite; }
+@keyframes beamPulse { 50% { opacity: .35; } }
+.beacon .gem { position: relative; width: 40px; height: 40px; transform: rotate(45deg); border-radius: 10px; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), var(--c) 45%, rgba(0,0,0,.4));
+  box-shadow: 0 0 18px var(--c), 0 0 0 2px rgba(255,255,255,.85); animation: bob 2.2s ease-in-out infinite; display: grid; place-items: center; }
+.beacon .gem span { transform: rotate(-45deg); font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+.beacon.rar-legendary .gem { box-shadow: 0 0 26px var(--gold), 0 0 0 3px var(--gold); }
+@keyframes bob { 50% { transform: rotate(45deg) translate(-4px, -4px); } }
+.beacon .bd { margin-top: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(3,5,10,.8); border: 1px solid rgba(255,255,255,.15); color: #eaf2ff; font: 700 12px -apple-system, "Segoe UI", sans-serif; white-space: nowrap; }
+
+/* Road alert markers */
+.hz { width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; }
+.hz b { position: relative; z-index: 2; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; background: rgba(3,5,10,.85); border: 2px solid var(--c); box-shadow: 0 0 14px var(--c); }
+.hz i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c); opacity: 0; animation: hzPing 2s ease-out infinite; }
+.hz i + i { animation-delay: 1s; }
+@keyframes hzPing { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(2.2); opacity: 0; } }
+.hz-police b { animation: strobeBorder .5s steps(1) infinite; }
+@keyframes strobeBorder { 0% { border-color: #ff2d45; box-shadow: 0 0 22px #ff2d45; } 50% { border-color: #2d6bff; box-shadow: 0 0 22px #2d6bff; } }
+.hz-traffic b, .hz-work b { width: 32px; height: 32px; font-size: 16px; }
+.hz-traffic i, .hz-work i, .hz-camera i { display: none; }
+.hz-camera b { width: 30px; height: 30px; font-size: 15px; }
+
+/* Full-screen edge flash */
+#threatFlash { position: fixed; inset: 0; z-index: 16; pointer-events: none; opacity: 0; transition: opacity .3s; }
+#threatFlash.on { opacity: 1; }
+#threatFlash.police { animation: policeFlash .9s linear infinite; }
+#threatFlash.danger { animation: dangerFlash 1.1s ease-in-out infinite; box-shadow: inset 0 0 120px 30px rgba(255,45,69,.55); }
+#threatFlash.hazard { animation: dangerFlash 1.4s ease-in-out infinite; box-shadow: inset 0 0 110px 26px rgba(255,170,40,.5); }
+#threatFlash.weather { animation: dangerFlash 2s ease-in-out infinite; box-shadow: inset 0 0 110px 26px rgba(124,247,212,.4); }
+@keyframes policeFlash {
+  0%, 22% { box-shadow: inset 160px 0 140px -40px rgba(255,35,60,.85), inset 0 0 60px rgba(255,35,60,.35); }
+  25%, 47% { box-shadow: inset 160px 0 140px -40px rgba(255,35,60,0), inset 0 0 0 rgba(0,0,0,0); }
+  50%, 72% { box-shadow: inset -160px 0 140px -40px rgba(40,100,255,.9), inset 0 0 60px rgba(40,100,255,.35); }
+  75%, 100% { box-shadow: inset -160px 0 140px -40px rgba(40,100,255,0), inset 0 0 0 rgba(0,0,0,0); }
+}
+@keyframes dangerFlash { 50% { opacity: .35; } }
+
+/* Alert banner card */
+#hzBanner { position: fixed; z-index: 17; top: calc(var(--top-h) + 10px); left: 50%; transform: translateX(-50%); width: min(620px, calc(100vw - 32px));
+  display: flex; gap: 14px; align-items: center; padding: 12px 16px 12px 12px; border-radius: 20px; background: rgba(6,9,16,.9); border: 2px solid var(--c, #ff4d5e);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--c, #ff4d5e) 55%, transparent), 0 20px 50px rgba(0,0,0,.5); cursor: pointer; animation: bannerIn .45s cubic-bezier(.2,.9,.2,1); }
+@keyframes bannerIn { from { opacity: 0; transform: translate(-50%, -30px) scale(.95); } }
+#hzBanner .hb-icon { width: 58px; height: 58px; flex: none; border-radius: 16px; display: grid; place-items: center; font-size: 32px; background: color-mix(in srgb, var(--c, #ff4d5e) 22%, transparent); }
+#hzBanner.police .hb-icon { animation: strobeBg .5s steps(1) infinite; }
+@keyframes strobeBg { 0% { background: rgba(255,45,69,.45); } 50% { background: rgba(45,107,255,.45); } }
+#hzBanner .hb-body { flex: 1; min-width: 0; }
+#hzBanner .hb-title { font-size: 22px; font-weight: 800; }
+#hzBanner .hb-desc { color: #b9c6da; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hzBanner .hb-dist { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+#hzBanner .hb-dist small { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+#hzBanner .hb-x { width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: rgba(255,255,255,.08); font-size: 16px; cursor: pointer; }
+
+/* Road alerts panel (right side) */
+#alertsPanel { position: fixed; z-index: 13; right: 22px; top: calc(var(--top-h) + 8px); bottom: calc(var(--dock-h) + 16px); width: min(460px, 44vw); display: flex; flex-direction: column; overflow: hidden; animation: panelIn .35s cubic-bezier(.2,.9,.2,1); }
+@keyframes panelIn { from { opacity: 0; transform: translateX(40px); } }
+#alertsPanel .ap-list { flex: 1; overflow-y: auto; padding: 8px 10px 14px; }
+.ap-item { display: flex; gap: 12px; align-items: center; padding: 10px 10px; border-radius: 14px; cursor: pointer; border: 1px solid transparent; }
+.ap-item:hover, .ap-item.hot { background: rgba(255,255,255,.05); border-color: var(--c); }
+.ap-item .ai-icon { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: color-mix(in srgb, var(--c) 20%, transparent); }
+.ap-item .ai-body { flex: 1; min-width: 0; }
+.ap-item b { display: block; font-size: 16px; }
+.ap-item small { display: block; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-item .ai-dist { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ap-item .ai-dist i { font-style: normal; display: inline-block; color: var(--c); transition: transform .6s; }
+.ap-weather { margin: 8px 10px 4px; padding: 12px 14px; border-radius: 14px; background: rgba(124,247,212,.08); border: 1px solid rgba(124,247,212,.35); }
+.ap-weather b { display: block; }
+.ap-weather small { color: #b9d6cf; }
+.ap-empty { padding: 30px 20px; text-align: center; color: var(--muted); }
+.ap-src { padding: 8px 14px 12px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
+.ap-detail { margin: 6px 10px; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,.04); border: 1px solid var(--c); animation: fadeUp .3s; }
+.ap-detail h3 { margin: 0 0 6px; font-size: 20px; }
+.ap-detail p { margin: 4px 0; color: #cdd8e6; font-size: 15px; line-height: 1.5; }
+.dock-badge { position: absolute; top: 6px; right: 22px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #ff4d5e; color: #fff; font: 800 12px/22px -apple-system, "Segoe UI", sans-serif; box-shadow: 0 0 10px #ff4d5e; }
+#dock button { position: relative; }
+
+/* Gamified HUD */
+.lvl { display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; }
+.lvl-ring { position: relative; width: 36px; height: 36px; }
+.lvl-ring svg { width: 36px; height: 36px; transform: rotate(-90deg); }
+.lvl-ring circle { fill: none; stroke-width: 4; }
+.lvl-ring .bg { stroke: rgba(255,255,255,.1); }
+.lvl-ring .fg { stroke: var(--gold); stroke-linecap: round; transition: stroke-dasharray .8s; filter: drop-shadow(0 0 4px rgba(255,214,107,.8)); }
+.lvl-ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 900; }
+.lvl span { font-size: 13px; color: #cfdcec; font-weight: 700; white-space: nowrap; }
+.lvl.levelup { animation: levelUp 1.2s ease-out; }
+@keyframes levelUp { 30% { transform: scale(1.25); box-shadow: 0 0 40px var(--gold); } }
+#nextChip { position: fixed; z-index: 11; left: 22px; bottom: calc(var(--dock-h) + 16px + 260px); display: flex; align-items: center; gap: 10px; max-width: 330px; padding: 10px 14px 10px 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: pointer; animation: fadeUp .4s; }
+#nextChip .nc-arrow { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: color-mix(in srgb, var(--c, #7cf7d4) 22%, transparent); color: var(--c, #7cf7d4); transition: transform .8s; }
+#nextChip small { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; }
+#nextChip b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+#nextChip.hidden { display: none; }
+body:has(#glassBox.hidden) #nextChip { bottom: calc(var(--dock-h) + 16px); }
+
+/* XP burst */
+.xp-burst { position: fixed; z-index: 25; pointer-events: none; transform: translate(-50%, -50%); }
+.xp-burst b { position: absolute; left: 50%; top: 0; transform: translate(-50%, 0); font: 900 26px -apple-system, "Segoe UI", sans-serif; color: var(--c); text-shadow: 0 0 14px var(--c), 0 2px 4px #000; white-space: nowrap; animation: xpUp 1.5s cubic-bezier(.2,.9,.2,1) forwards; }
+.xp-burst i { position: absolute; left: 0; top: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); animation: xpP 1s ease-out forwards; }
+@keyframes xpUp { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -20px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -110px) scale(1); } }
+@keyframes xpP { from { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateX(var(--d)) scale(.2); opacity: 0; } }
+
+@media (max-width: 900px) {
+  .lvl span { display: none; }
+  #nextChip { bottom: calc(var(--dock-h) + 16px); left: 16px; right: 16px; max-width: none; }
+  #alertsPanel { left: 16px; right: 16px; width: auto; }
+  .car-radar { width: 200px; height: 200px; }
+}

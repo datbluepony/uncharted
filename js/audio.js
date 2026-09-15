@@ -68,6 +68,8 @@ const SOUNDS = {
   quest: () => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => bell(f, i * 0.11, 0.08, 1.6)),
   alert: () => { note(740, 0, 0.25, { gain: 0.16, type: 'triangle' }); note(554, 0.28, 0.35, { gain: 0.16, type: 'triangle' }); },
   spill: () => note(200, 0, 0.25, { gain: 0.08, glide: 0.5 }),
+  // Gentle two-tone "wee-woo" for police: soft triangle tones, not a siren
+  police: () => [0, 0.32, 0.64].forEach((t) => { note(932, t, 0.18, { gain: 0.14, type: 'triangle' }); note(698, t + 0.16, 0.18, { gain: 0.14, type: 'triangle' }); }),
   region: () => { bell(784, 0, 0.08); bell(1175, 0.18, 0.07, 2); },
   select: () => bell(1760, 0, 0.045, 0.9),
   test: () => [523.25, 659.25, 783.99].forEach((f, i) => bell(f, i * 0.16, 0.12, 1.4)),
